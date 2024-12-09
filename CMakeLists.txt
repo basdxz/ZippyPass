@@ -18,5 +18,9 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS})
 link_directories(${LLVM_LIBRARY_DIRS})
 
-# Our pass lives in this subdirectory.
-add_subdirectory(LLVMPass)
+# Add the source directory
+add_subdirectory(src)
+
+# Add the test directory
+enable_testing()
+add_subdirectory(test)
