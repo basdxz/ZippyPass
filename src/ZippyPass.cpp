@@ -126,13 +126,12 @@ struct ZippyPass : PassInfoMixin<ZippyPass> {
             auto target = structMeta.target;
             errs() << "STRUCT: " << (target->hasName() ? target->getName() : "[UNNAMED]")  << "\n";
             for (auto &z: structMeta.funcGEPList) {
-                errs() << "_S_\n";
                 for (auto GEP: z) {
                     if (auto *CI = dyn_cast<ConstantInt>(GEP->getOperand(2))) {
-                        errs() << CI->getZExtValue() << "\n";
+                        errs() << CI->getZExtValue() << ", ";
                     }
                 }
-                errs() << "_E_\n";
+                errs() << "\n";
             }
 
             // errs() << target->getName() << " " << CI->getZExtValue() << "\n";
