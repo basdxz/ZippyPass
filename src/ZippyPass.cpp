@@ -2,163 +2,184 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
-
-using namespace llvm;
+#include "llvm/Support/Casting.h"
 
 namespace {
-#pragma region LLVM Print Utils
-// List all structs in the module
-void listStructs(Module &M) {
-    errs() << "Found Structures:\n";
-    for (auto &ST: M.getIdentifiedStructTypes()) {
-        errs() << "  Struct: " << ST->getName() << "\n";
-        if (!ST->isOpaque()) {
-            errs() << "    Elements (" << ST->getNumElements() << "):\n";
-            for (unsigned i = 0; i < ST->getNumElements(); i++) {
-                errs() << "      [" << i << "] "
-                        << *ST->getElementType(i) << "\n";
+const std::string TAB_STR = "    ";
+
+class ZippyPassImpl {
+    llvm::Module *module;
+    bool didWork = false;
+
+    std::vector<llvm::StructType *> structTypes;
+    std::vector<llvm::Function *> functions;
+
+    llvm::DenseMap<llvm::StructType *, std::vector<llvm::GetElementPtrInst *>> fieldUsages;
+
+public:
+    explicit ZippyPassImpl(llvm::Module *module)
+        : module(module) {
+    }
+
+    bool tryRun() {
+        enterModule();
+
+        if (!(findStructTypes() && findFunctions() && findFieldUses())) {
+            llvm::errs() << "No work in module\n";
+            return exitModule();
+        }
+
+        return exitModule();
+    }
+
+private:
+    bool findStructTypes() {
+        structTypes = module->getIdentifiedStructTypes();
+        if (structTypes.empty()) {
+            llvm::errs() << "No struct types found\n";
+            return false;
+        } else {
+            llvm::errs() << "Found (" << structTypes.size() << ") struct types:\n";
+
+            for (auto i = 0; i < structTypes.size(); i++) {
+                const auto structType = structTypes[i];
+                llvm::errs() << TAB_STR << "ST[" << i << "] -> ";
+                structType->print(llvm::errs(), true);
+                llvm::errs() << "\n";
             }
+            return true;
         }
-        errs() << "\n";
-    }
-}
-
-// List all functions in the module
-void listFunctions(Module &M) {
-    errs() << "Found Functions:\n";
-    for (auto &F: M) {
-        errs() << "  Function: " << F.getName() << "\n";
-        errs() << "    Return Type: " << *F.getReturnType() << "\n";
-        errs() << "    Arguments (" << F.arg_size() << "):\n";
-        for (auto &Arg: F.args()) {
-            errs() << "      " << *Arg.getType() << " "
-                    << Arg.getName() << "\n";
-        }
-        errs() << "    Basic Blocks: " << F.size() << "\n\n";
-    }
-}
-#pragma endregion
-
-typedef uint64_t u64;
-
-template<typename V>
-using Vector = std::vector<V>;
-
-template<typename K, typename V>
-using Map = std::unordered_map<K, V>;
-
-struct StructMetadata {
-    StructType *target;
-
-    Map<u64, u64> layoutRemap;
-    Vector<Vector<GetElementPtrInst *>> funcGEPList;
-
-    explicit StructMetadata(StructType *target) : target(target) {
-        for (auto i = 0; i < target->getNumElements(); i++)
-            layoutRemap[i] = i;
-        errs() << "Created struct metadata for: ";
-        target->print(errs(), true);
-        errs() << "\n";
     }
 
-    bool addElemUse(Function &F, u64 funcNum, GetElementPtrInst *GEP) {
-        if (auto *CI = dyn_cast<ConstantInt>(GEP->getOperand(2))) {
-            auto isNewFunc = funcGEPList.size() <= funcNum;
-            if (isNewFunc) {
-                errs() <<
-                        "Started tracking elements of Struct: " <<
-                        (target->hasName() ? target->getName() : "[UNNAMED]") <<
-                        " on Function: " <<
-                        (F.hasName() ? F.getName() : "[UNNAMED]") <<
-                        "\n";
-                funcGEPList.resize(funcNum + 1);
+    bool findFunctions() {
+        // Skips declarations, eg functions defined elsewhere
+        for (auto &function: module->functions())
+            if (!function.isDeclaration())
+                functions.push_back(&function);
+
+        if (functions.empty()) {
+            llvm::errs() << "No functions found\n";
+            return false;
+        } else {
+            llvm::errs() << "Found (" << functions.size() << ") functions:\n";
+
+            for (auto i = 0; i < functions.size(); i++) {
+                const auto function = functions[i];
+                llvm::errs() << TAB_STR << "F[" << i << "] -> ";
+                llvm::errs() << (function->hasName() ? function->getName() : "?") << " = ";
+                function->getFunctionType()->print(llvm::errs(), true);
+                llvm::errs() << "\n";
             }
-            funcGEPList[funcNum].push_back(GEP);
-
-            return isNewFunc;
+            return true;
         }
-        // Should never happen, but might?
-        report_fatal_error("Operand 2 of GEP not a ConstantInt");
     }
-};
 
-struct ZippyPass : PassInfoMixin<ZippyPass> {
-    PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
-        Map<StructType *, StructMetadata> structMap;
+    bool findFieldUses() {
+        for (auto structType: structTypes) {
+            fieldUsages.FindAndConstruct(structType);
+        }
 
-        auto funcNum = 0;
-        for (auto &F: M) {
-            // Skips `declare`, we only want `define`
-            if (F.isDeclaration())
-                continue;
+        auto foundUsesInModule = false;
+        for (auto i = 0; i < functions.size(); i++) {
+            const auto function = functions[i];
+            auto foundUsesInFunction = false;
+            llvm::errs() << "Checking: F[" << i << "] for field usage\n";
 
-            errs() << "Entering function: " << (F.hasName() ? F.getName() : "[UNNAMED]") << "\n";
-            for (auto &BB: F) {
-                for (auto &I: BB) {
-                    if (auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
-                        if (auto *ST = dyn_cast<StructType>(GEP->getSourceElementType())) {
-                            errs() << "Found Struct GEP: ";
-                            GEP->print(errs(), true);
-                            auto gepOperandCount = GEP->getNumOperands();
+            for (auto &inst: function->getEntryBlock()) {
+                if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(&inst)) {
+                    // Won't have a field index
+                    if (gepInst->getNumOperands() < 3)
+                        continue;
 
-                            // Generally if we have 3 operand, the indexing is into a stride
-                            // and then into a field of a struct.
-                            //
-                            // 4 is also valid if the field is a struct, where the last operand is
-                            // an index into the array referenced inside the field.
-                            if (gepOperandCount < 3) {
-                                errs() << " (Unexpected operand count, skipping)\n";
+                    if (const auto *gepStructType = llvm::dyn_cast<llvm::StructType>(gepInst->getSourceElementType())) {
+                        for (auto j = 0; j < structTypes.size(); j++) {
+                            auto structType = structTypes[j];
+                            if (gepStructType != structType)
                                 continue;
-                            }
-                            errs() << "\n";
 
-                            auto &metadata = structMap.try_emplace(ST, ST).first->second;
-                            metadata.addElemUse(F, funcNum, GEP);
+                            if (const auto *fieldIndexOperand = llvm::dyn_cast<llvm::ConstantInt>(gepInst->getOperand(2))) {
+                                const auto fieldIndex = fieldIndexOperand->getZExtValue();
+                                fieldUsages[structType].push_back(gepInst);
+                                foundUsesInModule = true;
+                                foundUsesInFunction = true;
+
+                                llvm::errs() << TAB_STR << "Found use of: ST[" << j << "]";
+                                llvm::errs() << "[" << fieldIndex << "](";
+
+                                // Handle known types
+                                const auto fieldType = structType->getElementType(fieldIndex);
+                                auto isFieldTypeKnown = false;
+                                for (auto k = 0; k < structTypes.size(); k++) {
+                                    if (fieldType != structTypes[k])
+                                        continue;
+                                    llvm::errs() << "ST[" << k << "]";
+                                    isFieldTypeKnown = true;
+                                    break;
+                                }
+                                if (!isFieldTypeKnown)
+                                    fieldType->print(llvm::errs(), true);
+
+                                llvm::errs() << ")\n";
+                            }
                         }
                     }
                 }
             }
-            errs() << "\n";
-            funcNum++;
+
+            if(!foundUsesInFunction)
+                llvm::errs() << TAB_STR << "No field uses found in function\n";
         }
 
-        for (auto &[ST, structMeta]: structMap) {
-            auto target = structMeta.target;
-            errs() << "STRUCT: " << (target->hasName() ? target->getName() : "[UNNAMED]")  << "\n";
-            for (auto &z: structMeta.funcGEPList) {
-                for (auto GEP: z) {
-                    if (auto *CI = dyn_cast<ConstantInt>(GEP->getOperand(2))) {
-                        errs() << CI->getZExtValue() << ", ";
-                    }
-                }
-                errs() << "\n";
-            }
-
-            // errs() << target->getName() << " " << CI->getZExtValue() << "\n";
-
-            // Create the new constant value you want
-            // auto *newIndex = ConstantInt::get(CI->getIntegerType(), 1L);
-            // GEP->setOperand(GEP->getNumOperands() - 1, newIndex);
-            // return PreservedAnalyses::none();
+        if (!foundUsesInModule) {
+            llvm::errs() << "No field uses found in module\n";
+            return false;
         }
 
-        return PreservedAnalyses::none();
+        llvm::errs() << fieldUsages.size() << "!!!\n";
+        return true;
+    }
+
+    void enterModule() {
+        llvm::errs() << "Entering Module: [" << module->getName() << "]\n";
+    }
+
+    bool exitModule() {
+        llvm::errs() << "Exiting Module: [" << module->getName() << "]\n";
+        if (!didWork) {
+            llvm::errs() << TAB_STR << "Module Unchanged\n";
+            return false;
+        }
+
+        llvm::errs() << TAB_STR << "LIST CHANGES HERE\n";
+        return true;
     }
 };
+
+//     // Create the new constant value you want
+//     // auto *newIndex = ConstantInt::get(CI->getIntegerType(), 1L);
+//     // GEP->setOperand(GEP->getNumOperands() - 1, newIndex);
 }
 
 #pragma region LLVM Plugin
 
-extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo
+namespace {
+struct ZippyPass : llvm::PassInfoMixin<ZippyPass> {
+    llvm::PreservedAnalyses run(llvm::Module &M, llvm::ModuleAnalysisManager &AM) {
+        return ZippyPassImpl(&M).tryRun() ? llvm::PreservedAnalyses::none() : llvm::PreservedAnalyses::all();
+    }
+};
+}
+
+extern "C" LLVM_ATTRIBUTE_WEAK llvm::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
     return {
         .APIVersion = LLVM_PLUGIN_API_VERSION,
         .PluginName = "ZippyPass",
         .PluginVersion = "v0.1",
-        .RegisterPassBuilderCallbacks = [](PassBuilder &PB) {
+        .RegisterPassBuilderCallbacks = [](llvm::PassBuilder &PB) {
             PB.registerPipelineParsingCallback(
-                [](StringRef Name, ModulePassManager &MPM,
-                   ArrayRef<PassBuilder::PipelineElement>) {
+                [](llvm::StringRef Name, llvm::ModulePassManager &MPM,
+                   llvm::ArrayRef<llvm::PassBuilder::PipelineElement>) {
                     // Allows this plugin to run when using opt with the pass named 'zippy'
                     //
                     // eg: -load-pass-plugin ZippyPass.so -passes=zippy input.ll -o output.ll -S
