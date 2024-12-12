@@ -16,8 +16,12 @@ class ZippyPassImpl {
     std::vector<StructType *> structTypes;
     std::vector<Function *> functions;
 
-    SmallDenseMap<StructType *, SmallDenseMap<Function *, std::vector<std::pair<GetElementPtrInst *, unsigned>>>>
-    fieldUseMap;
+    std::unordered_map<
+        StructType *, std::unordered_map<Function *, std::vector<std::pair<GetElementPtrInst *, unsigned>>>
+    > fieldUseMap;
+
+    std::unordered_map<StructType *, std::vector<unsigned>> fieldCommonPrefixes;
+    std::unordered_map<StructType *, std::vector<std::pair<Type *, unsigned>>> fieldLayoutRemaps;
 
 public:
     explicit ZippyPassImpl(Module *module): module(module) {
@@ -31,14 +35,30 @@ public:
             return exitModule();
         }
 
-
-        if (fieldUseMap.empty())
-            didWork = true;
+        if (!findFieldCommonPrefixes()) {
+            errs() << "No better layouts found\n";
+            return exitModule();
+        }
 
         return exitModule();
     }
 
 private:
+    void enterModule() {
+        errs() << "Entering Module: [" << module->getName() << "]\n";
+    }
+
+    bool exitModule() {
+        errs() << "Exiting Module: [" << module->getName() << "]\n";
+        if (!didWork) {
+            errs() << TAB_STR << "Module Unchanged\n";
+            return false;
+        }
+
+        errs() << TAB_STR << "LIST CHANGES HERE\n";
+        return true;
+    }
+
     bool findStructTypes() {
         structTypes = module->getIdentifiedStructTypes();
         if (structTypes.empty()) {
@@ -86,6 +106,7 @@ private:
             const auto function = functions[i];
             auto foundUsesInFunction = false;
             errs() << "Field usages in: F[" << i << "]\n";
+
 
             for (auto &inst: function->getEntryBlock()) {
                 if (auto *gepInst = dyn_cast<GetElementPtrInst>(&inst)) {
@@ -141,16 +162,16 @@ private:
 
         for (auto i = 0; i < structTypes.size(); i++) {
             auto structType = structTypes[i];
-            auto fieldUseLists = fieldUseMap[structType];
-            if (fieldUseLists.empty())
+            if (!fieldUseMap.count(structType))
                 continue;
+            auto fieldUseLists = fieldUseMap[structType];
 
             errs() << "Field usages of: ST[" << i << "]\n";
             for (auto j = 0; j < functions.size(); j++) {
                 auto function = functions[j];
-                auto fieldUsages = fieldUseLists[function];
-                if (fieldUsages.empty())
+                if (!fieldUseLists.count(function))
                     continue;
+                auto fieldUsages = fieldUseLists[function];
 
                 errs() << TAB_STR << "F[" << j << "]: (|";
                 for (auto [gepInst, fieldIndex]: fieldUsages)
@@ -161,19 +182,25 @@ private:
         return true;
     }
 
-    void enterModule() {
-        errs() << "Entering Module: [" << module->getName() << "]\n";
-    }
 
-    bool exitModule() {
-        errs() << "Exiting Module: [" << module->getName() << "]\n";
-        if (!didWork) {
-            errs() << TAB_STR << "Module Unchanged\n";
-            return false;
+    bool findFieldCommonPrefixes() {
+        auto foundPrefixes = false;
+        for (auto i = 0; i < structTypes.size(); i++) {
+            auto structType = structTypes[i];
+            if (!fieldUseMap.count(structType))
+                continue;
+            auto fieldUseLists = fieldUseMap[structType];
+
+            std::vector<unsigned> commonPrefix;
+            for (auto j = 0; j < structType->getNumElements(); j++) {
+
+            }
+
+            for (auto [function, fieldUsages]: fieldUseLists) {
+
+            }
         }
-
-        errs() << TAB_STR << "LIST CHANGES HERE\n";
-        return true;
+        return foundPrefixes;
     }
 };
 
