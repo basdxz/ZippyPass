@@ -19,6 +19,10 @@ namespace Zippy {
         void printName(llvm::raw_ostream &OS) const {
             OS << (ptr->hasName() ? ptr->getName().ltrim("struct.") : NO_VAL_NAME_STR);
         }
+
+        Type getElementType(const unsigned index) const {
+            return {ptr->getElementType(index)};
+        }
     };
 
     struct Function {

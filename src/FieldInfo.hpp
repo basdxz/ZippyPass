@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ZippyCommon.hpp"
-#include <llvm/IR/Constants.h>
 #include <vector>
 
 namespace Zippy {
@@ -31,7 +30,7 @@ namespace Zippy {
         unsigned targetIndex;
 
     public:
-        FieldInfo(const unsigned idx, const Type type): type(type), currentIndex(idx), targetIndex(idx) {}
+        FieldInfo(const Type type, const unsigned idx): type(type), currentIndex(idx), targetIndex(idx) {}
 
         Type getType() const {
             return type;

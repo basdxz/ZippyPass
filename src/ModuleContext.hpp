@@ -3,6 +3,7 @@
 #include "ZippyCommon.hpp"
 #include "FunctionInfo.hpp"
 #include "FieldInfo.hpp"
+#include "StructInfo.hpp"
 
 namespace Zippy {
     class ModuleContext {
