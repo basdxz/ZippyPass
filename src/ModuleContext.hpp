@@ -1,45 +1,75 @@
-#ifndef MODULECONTEXT_HPP
-#define MODULECONTEXT_HPP
+#pragma once
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/PassManager.h>
+#include "ZippyCommon.hpp"
 
 namespace Zippy {
     class ModuleContext {
-    public:
+        enum State {
+            UNKNOWN,
+            HAS_WORK,
+            HAS_NO_WORK,
+            WAS_MODIFIED
+        };
+
         explicit ModuleContext(llvm::Module &M,
                                llvm::ModuleAnalysisManager &AM): M(M), AM(AM) {
         }
 
-    private:
         llvm::Module &M;
         llvm::ModuleAnalysisManager &AM;
 
-        bool wasModified = false;
+        std::vector<StructType> _structTypes;
+        std::vector<Function> _functions;
+
+        State state = UNKNOWN;
 
     public:
-        std::vector<llvm::StructType *> structTypes;
-        std::vector<llvm::Function *> functions;
+        static ModuleContext init(llvm::Module &M, llvm::ModuleAnalysisManager &AM) {
+            auto ctx = ModuleContext(M, AM);
 
-        int findStructTypes() {
-            structTypes = M.getIdentifiedStructTypes();
-            return structTypes.size();
+            for (const auto structType: M.getIdentifiedStructTypes()) {
+                ctx._structTypes.push_back({structType});
+            }
+
+            for (auto &function: M.functions()) {
+                if (!function.isDeclaration()) {
+                    ctx._functions.push_back({&function});
+                }
+            }
+
+            llvm::errs() << "Structs: \n";
+            for (const auto &structType: ctx.structTypes()) {
+                llvm::errs() << TAB_STR << structType << "\n";
+            }
+
+            llvm::errs() << "Functions: \n";
+            for (const auto &function: ctx.functions()) {
+                llvm::errs() << TAB_STR << function << "\n";
+            }
+
+            ctx.state = ctx._structTypes.empty() || ctx._functions.empty() ? HAS_NO_WORK : HAS_WORK;
+            return ctx;
         }
 
-        int findFunctionDeclarations() {
-            for (auto &function: M.functions())
-                if (!function.isDeclaration())
-                    functions.push_back(&function);
-            return functions.size();
+        bool hasWork() {
+            return state == HAS_WORK || state == WAS_MODIFIED;
         }
 
         void markModified() {
-            wasModified = true;
+            assert(hasWork());
+            state = WAS_MODIFIED;
+        }
+
+        std::vector<StructType> &structTypes() {
+            return _structTypes;
+        }
+
+        std::vector<Function> &functions() {
+            return _functions;
         }
 
         llvm::PreservedAnalyses finish() {
-            return wasModified ? llvm::PreservedAnalyses::none() : llvm::PreservedAnalyses::all();
+            return state == WAS_MODIFIED ? llvm::PreservedAnalyses::none() : llvm::PreservedAnalyses::all();
         }
     };
 }
-#endif
