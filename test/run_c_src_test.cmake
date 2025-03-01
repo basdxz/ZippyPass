@@ -11,8 +11,9 @@
 # EG: clang -S -emit-llvm -O0 input.c -o input.ll
 execute_process(
         COMMAND ${CLANG_EXE} -S -emit-llvm -O0
-        ${TEST_DIR}/input.c
+        -x c ${TEST_DIR}/input.c
         -o ${TEST_DIR}/input.ll
+        -fno-discard-value-names -g
         RESULT_VARIABLE CLANG_RESULT
 )
 
