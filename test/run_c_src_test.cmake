@@ -5,6 +5,8 @@
 # An input file named `input.c` will be used to emit the initial IR `input.ll`
 #
 # Which will then be run through the optimisation pass to create the output `output.ll` for inspection.
+#
+# Then, both the `input.ll` and `output.ll` are compiled into the executables `input` and `output`
 
 # Emit initial IR
 #
@@ -37,4 +39,34 @@ execute_process(
 # Check Result
 if(NOT PROC_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to run optimization pass")
+endif()
+
+# Compile the input IR into an executable
+#
+# EG: `clang input.ll -o input`
+execute_process(
+        COMMAND ${CLANG_EXE}
+        ${TEST_DIR}/input.ll
+        -o ${TEST_DIR}/input
+        RESULT_VARIABLE PROC_RESULT
+)
+
+# Check Result
+if(NOT PROC_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to compile input IR")
+endif()
+
+# Compile the output IR into an executable
+#
+# EG: `clang output.ll -o output`
+execute_process(
+        COMMAND ${CLANG_EXE}
+        ${TEST_DIR}/output.ll
+        -o ${TEST_DIR}/output
+        RESULT_VARIABLE PROC_RESULT
+)
+
+# Check Result
+if(NOT PROC_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to compile output IR")
 endif()
