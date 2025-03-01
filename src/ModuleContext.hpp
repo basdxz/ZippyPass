@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ZippyCommon.hpp"
+#include "FunctionInfo.hpp"
+#include "FieldInfo.hpp"
 
 namespace Zippy {
     class ModuleContext {

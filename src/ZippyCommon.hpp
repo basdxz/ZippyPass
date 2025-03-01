@@ -3,10 +3,15 @@
 #include <llvm/IR/PassManager.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Support/Casting.h>
+#include <llvm/IR/Constants.h>
 
 namespace Zippy {
     const std::string NO_VAL_NAME_STR = "???";
     const std::string TAB_STR = "    ";
+
+    struct Type {
+        llvm::Type *ptr;
+    };
 
     struct StructType {
         llvm::StructType *ptr;
@@ -21,6 +26,23 @@ namespace Zippy {
 
         void printName(llvm::raw_ostream &OS) const {
             OS << (ptr->hasName() ? ptr->getName() : NO_VAL_NAME_STR);
+        }
+    };
+
+    struct GetElementPtrInstRef {
+        llvm::GetElementPtrInst *ptr;
+        // Is GEP result is used in a store
+        bool isWrite;
+
+        GetElementPtrInstRef(llvm::GetElementPtrInst *ptr,
+                             const bool isWrite): ptr(ptr), isWrite(isWrite) {}
+
+        llvm::ConstantInt *getOperand(const unsigned operandIndex) const {
+            return llvm::cast<llvm::ConstantInt>(ptr->getOperand(operandIndex));
+        }
+
+        void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) const {
+            ptr->setOperand(operandIndex, operand);
         }
     };
 }
