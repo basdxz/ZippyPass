@@ -12,3 +12,7 @@ typedef struct {
 int funcA(BackwardsStruct v) {
     return v.a + v.b + v.c + v.d + v.e + v.f + v.g + v.h;
 }
+
+int main() {
+    return 0;
+}

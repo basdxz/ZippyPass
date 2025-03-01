@@ -5,3 +5,7 @@ int foo() {
 void bar() {
    return;
 }
+
+int main() {
+   return 0;
+}

@@ -10,3 +10,7 @@ int foo() {
 void bar(Point a[], Point b[]) {
    a[0] = b[1];
 }
+
+int main() {
+   return 0;
+}
