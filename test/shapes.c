@@ -24,6 +24,13 @@ void print_rectangle(struct Rectangle* rect) {
            rect->bottom_right.x, rect->bottom_right.y);
 }
 
+void reset(struct Rectangle* rect) {
+    rect->top_left.x = 1;
+    rect->top_left.y = 1;
+    rect->bottom_right.x = 1;
+    rect->bottom_right.y = 1;
+}
+
 int main() {
     struct Rectangle rect = {{1, 2}, {3, 4}, "ABCDEFG"};
     print_rectangle(&rect);
