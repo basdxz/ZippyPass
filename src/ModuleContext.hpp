@@ -24,6 +24,9 @@ namespace Zippy {
         std::vector<StructType> _structTypes;
         std::vector<Function> _functions;
 
+        std::vector<StructInfo> structInfos;
+        std::vector<FunctionInfo> functionInfos;
+
         State state = UNKNOWN;
 
     public:
@@ -43,11 +46,21 @@ namespace Zippy {
             llvm::errs() << "Structs: \n";
             for (const auto &structType: ctx.structTypes()) {
                 llvm::errs() << TAB_STR << structType << "\n";
+                ctx.structInfos.emplace_back(structType);
             }
 
             llvm::errs() << "Functions: \n";
             for (const auto &function: ctx.functions()) {
                 llvm::errs() << TAB_STR << function << "\n";
+                ctx.functionInfos.emplace_back(function);
+            }
+
+            for (auto &functionInfo: ctx.functionInfos) {
+                if (functionInfo.collectGepInsts()) {
+                    for (auto &structInfo: ctx.structInfos) {
+                        structInfo.collectUsages(functionInfo);
+                    }
+                }
             }
 
             ctx.state = ctx._structTypes.empty() || ctx._functions.empty() ? HAS_NO_WORK : HAS_WORK;

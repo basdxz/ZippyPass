@@ -48,8 +48,8 @@ namespace Zippy {
             this->targetIndex = targetIndex;
         }
 
-        void addUse(const FieldUse &use) {
-            uses.push_back(use);
+        void addUse(const GetElementPtrInstRef gepRef, const unsigned operandIndex) {
+            uses.emplace_back(gepRef, operandIndex);
         }
 
         std::vector<FieldUse> &getUses() {

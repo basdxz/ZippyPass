@@ -23,7 +23,7 @@ namespace Zippy {
         }
 
         void collectUsages(FunctionInfo functionInfo) {
-            for (const auto gepRef: functionInfo.getGepRefs()) {
+            for (const auto &gepRef: functionInfo.getGepRefs()) {
                 // Check if the source element is this struct
                 if (gepRef.ptr->getSourceElementType() != structType.ptr) continue;
                 // Get the operand and validate that it is indeed, a `ConstantInt`
@@ -32,7 +32,7 @@ namespace Zippy {
 
                 // Get the field index and add the usage
                 const auto fieldIndex = fieldIndexOperand->getZExtValue();
-                fields[fieldIndex].addUse({gepRef, FIELD_IDX});
+                fields[fieldIndex].addUse(gepRef, FIELD_IDX);
             }
         }
     };

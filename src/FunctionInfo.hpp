@@ -38,7 +38,7 @@ namespace Zippy {
         }
 
         // Returned values have a `StructType` as their source element, no arrays
-        std::vector<GetElementPtrInstRef> &getGepRefs() {
+        std::vector<GetElementPtrInstRef> getGepRefs() {
             return gepRefs;
         }
     };
