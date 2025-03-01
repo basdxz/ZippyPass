@@ -8,33 +8,33 @@
 
 # Emit initial IR
 #
-# EG: clang -S -emit-llvm -O0 input.c -o input.ll
+# EG: `clang -S -emit-llvm -O0 -x c input.c -o input.ll -fno-discard-value-names -g`
 execute_process(
         COMMAND ${CLANG_EXE} -S -emit-llvm -O0
         -x c ${TEST_DIR}/input.c
         -o ${TEST_DIR}/input.ll
         -fno-discard-value-names -g
-        RESULT_VARIABLE CLANG_RESULT
+        RESULT_VARIABLE PROC_RESULT
 )
 
 # Check Result
-if(NOT CLANG_RESULT EQUAL 0)
+if(NOT PROC_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to emit IR")
 endif()
 
 # Run the optimization pass
 #
-# EG: opt -load-pass-plugin ZippyPass.so -passes=zippy input.ll -o output.ll`
+# EG: `opt -load-pass-plugin ZippyPass.so -passes=zippy input.ll -o output.ll -S`
 execute_process(
         COMMAND ${OPT_EXE} -load-pass-plugin ${PLUGIN_PATH}
         -passes=zippy
         ${TEST_DIR}/input.ll
         -o ${TEST_DIR}/output.ll
         -S
-        RESULT_VARIABLE OPT_RESULT
+        RESULT_VARIABLE PROC_RESULT
 )
 
 # Check Result
-if(NOT OPT_RESULT EQUAL 0)
+if(NOT PROC_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to run optimization pass")
 endif()
