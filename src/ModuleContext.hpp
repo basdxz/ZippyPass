@@ -46,7 +46,7 @@ namespace Zippy {
             llvm::errs() << "Structs: \n";
             for (const auto &structType: ctx.structTypes()) {
                 llvm::errs() << TAB_STR << structType << "\n";
-                ctx.structInfos.emplace_back(structType);
+                ctx.structInfos.emplace_back(structType).initFieldInfo();
             }
 
             llvm::errs() << "Functions: \n";

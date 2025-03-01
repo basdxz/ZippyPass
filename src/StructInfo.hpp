@@ -33,6 +33,7 @@ namespace Zippy {
                 // Get the field index and add the usage
                 const auto fieldIndex = fieldIndexOperand->getZExtValue();
                 fields[fieldIndex].addUse(gepRef, FIELD_IDX);
+                llvm::errs() << "PING!\n";
             }
         }
     };
