@@ -2,11 +2,13 @@
 
 #include <llvm/IR/PassManager.h>
 #include <llvm/IR/Instructions.h>
-#include <llvm/Support/Casting.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/Support/Casting.h>
+#include <llvm/Support/Format.h>
 
 namespace Zippy {
     const std::string NO_VAL_NAME_STR = "???";
+    const std::string SKIPPED_STR = "[SKIPPED]";
     const std::string TAB_STR = "    ";
 
     struct Type {
@@ -27,6 +29,10 @@ namespace Zippy {
 
     struct Function {
         llvm::Function *ptr;
+
+        bool isDefined() const {
+            return !ptr->isDeclaration();
+        }
 
         void printName(llvm::raw_ostream &OS) const {
             OS << (ptr->hasName() ? ptr->getName() : NO_VAL_NAME_STR);

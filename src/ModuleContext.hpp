@@ -43,25 +43,25 @@ namespace Zippy {
                 }
             }
 
-            llvm::errs() << "Structs: \n";
-            for (const auto &structType: ctx.structTypes()) {
-                llvm::errs() << TAB_STR << structType << "\n";
-                ctx.structInfos.emplace_back(structType).initFieldInfo();
-            }
-
+            // llvm::errs() << "Structs: \n";
+            // for (const auto &structType: ctx.structTypes()) {
+            //     llvm::errs() << TAB_STR << structType << "\n";
+            //     ctx.structInfos.emplace_back(structType).initFieldInfo();
+            // }
+            //
             llvm::errs() << "Functions: \n";
             for (const auto &function: ctx.functions()) {
                 llvm::errs() << TAB_STR << function << "\n";
                 ctx.functionInfos.emplace_back(function);
             }
-
-            for (auto &functionInfo: ctx.functionInfos) {
-                if (functionInfo.collectGepInsts()) {
-                    for (auto &structInfo: ctx.structInfos) {
-                        structInfo.collectUsages(functionInfo);
-                    }
-                }
-            }
+            //
+            // for (auto &functionInfo: ctx.functionInfos) {
+            //     if (functionInfo.collectGepInsts()) {
+            //         for (auto &structInfo: ctx.structInfos) {
+            //             structInfo.collectUsages(functionInfo);
+            //         }
+            //     }
+            // }
 
             ctx.state = ctx._structTypes.empty() || ctx._functions.empty() ? HAS_NO_WORK : HAS_WORK;
             return ctx;

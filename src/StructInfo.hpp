@@ -12,17 +12,24 @@ namespace Zippy {
         StructType structType;
 
         std::vector<FieldInfo> fields;
+        unsigned sumFieldUsages;
 
     public:
-        explicit StructInfo(const StructType structType): structType(structType) {}
-
-        void initFieldInfo() {
+        explicit StructInfo(const StructType structType): structType(structType), sumFieldUsages(0) {
             const auto numElements = structType.ptr->getNumElements();
             for (auto i = 0; i < numElements; i++)
                 fields.emplace_back(structType.getElementType(i), i);
         }
 
-        void collectUsages(FunctionInfo functionInfo) {
+        StructType getStructType() const {
+            return structType;
+        }
+
+        unsigned getSumFieldUsages() const {
+            return sumFieldUsages;
+        }
+
+        void collectFieldUsages(FunctionInfo functionInfo) {
             for (const auto &gepRef: functionInfo.getGepRefs()) {
                 // Check if the source element is this struct
                 if (gepRef.ptr->getSourceElementType() != structType.ptr) continue;
@@ -33,7 +40,8 @@ namespace Zippy {
                 // Get the field index and add the usage
                 const auto fieldIndex = fieldIndexOperand->getZExtValue();
                 fields[fieldIndex].addUse(gepRef, FIELD_IDX);
-                llvm::errs() << "PING!\n";
+
+                sumFieldUsages++;
             }
         }
     };

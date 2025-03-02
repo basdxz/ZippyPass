@@ -7,14 +7,10 @@ namespace Zippy {
         Function function;
         std::vector<GetElementPtrInstRef> gepRefs;
 
+        unsigned numFieldUsages;
+
     public:
-        explicit FunctionInfo(const Function function): function(function) {}
-
-        Function getFunction() const {
-            return function;
-        }
-
-        bool collectGepInsts() {
+        explicit FunctionInfo(const Function function): function(function) {
             // Entry block will start at the first function
             for (auto &inst: function.ptr->getEntryBlock()) {
                 // Collect only gep instructions
@@ -34,11 +30,14 @@ namespace Zippy {
                 gepRefs.emplace_back(gepInst, isWrite);
             }
             // Returns false if none have been found
-            return !gepRefs.empty();
+        }
+
+        Function getFunction() const {
+            return function;
         }
 
         // Returned values have a `StructType` as their source element, no arrays
-        std::vector<GetElementPtrInstRef> getGepRefs() {
+        std::vector<GetElementPtrInstRef>& getGepRefs() {
             return gepRefs;
         }
     };
