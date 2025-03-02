@@ -6,16 +6,17 @@
 
 namespace Zippy {
     class StructInfo {
-        // TODO: This is a guess and will "generally" be correct
+        // TODO: This is a guess and will "generally" be correct, it's wrong when geps are generated in a chained way.
         const unsigned FIELD_IDX = 2;
 
         StructType structType;
 
         std::vector<FieldInfo> fields;
-        unsigned sumFieldUsages;
+        unsigned sumFieldUses;
 
     public:
-        explicit StructInfo(const StructType structType): structType(structType), sumFieldUsages(0) {
+        explicit StructInfo(const StructType structType): structType(structType), sumFieldUses(0) {
+            // Collect all the elements from this struct early
             const auto numElements = structType.ptr->getNumElements();
             for (auto i = 0; i < numElements; i++)
                 fields.emplace_back(structType.getElementType(i), i);
@@ -25,14 +26,15 @@ namespace Zippy {
             return structType;
         }
 
-        unsigned getSumFieldUsages() const {
-            return sumFieldUsages;
+        unsigned getSumFieldUses() const {
+            return sumFieldUses;
         }
 
-        void collectFieldUsages(FunctionInfo functionInfo) {
+        bool collectFieldUses(FunctionInfo& functionInfo) {
+            unsigned foundUses = 0;
             for (const auto &gepRef: functionInfo.getGepRefs()) {
                 // Check if the source element is this struct
-                if (gepRef.ptr->getSourceElementType() != structType.ptr) continue;
+                if (!gepRef.isSameSourceStructType(structType)) continue;
                 // Get the operand and validate that it is indeed, a `ConstantInt`
                 const auto *fieldIndexOperand = llvm::dyn_cast<llvm::ConstantInt>(gepRef.ptr->getOperand(FIELD_IDX));
                 if (!fieldIndexOperand) continue;
@@ -41,8 +43,12 @@ namespace Zippy {
                 const auto fieldIndex = fieldIndexOperand->getZExtValue();
                 fields[fieldIndex].addUse(gepRef, FIELD_IDX);
 
-                sumFieldUsages++;
+                // Track uses
+                foundUses++;
             }
+            sumFieldUses += foundUses;
+            functionInfo.incrementUsedGepRefs(foundUses);
+            return foundUses;
         }
     };
 }

@@ -4,7 +4,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/Support/Casting.h>
-#include <llvm/Support/Format.h>
+
 
 namespace Zippy {
     const std::string NO_VAL_NAME_STR = "???";
@@ -43,6 +43,10 @@ namespace Zippy {
         llvm::GetElementPtrInst *ptr;
         // Is GEP result is used in a store
         bool isWrite;
+
+        bool isSameSourceStructType(StructType const &structType) const {
+            return structType.ptr == ptr->getSourceElementType();
+        }
 
         GetElementPtrInstRef(llvm::GetElementPtrInst *ptr,
                              const bool isWrite): ptr(ptr), isWrite(isWrite) {}

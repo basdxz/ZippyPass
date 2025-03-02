@@ -3,6 +3,5 @@ add_llvm_pass_plugin(ZippyPass
         FunctionInfo.hpp
         FieldInfo.hpp
         StructInfo.hpp
-        ModuleContext.hpp
         ZippyPass.cpp
 )

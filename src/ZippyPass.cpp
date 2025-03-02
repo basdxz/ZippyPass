@@ -1,4 +1,7 @@
-#include "ModuleContext.hpp"
+#include "ZippyCommon.hpp"
+#include "FunctionInfo.hpp"
+#include "FieldInfo.hpp"
+#include "StructInfo.hpp"
 
 #include <llvm/Pass.h>
 #include <llvm/Passes/PassBuilder.h>
@@ -9,15 +12,9 @@ namespace Zippy {
         llvm::Module &M;
         llvm::ModuleAnalysisManager &AM;
 
-        std::vector<StructInfo> structInfos;
-        std::vector<FunctionInfo> functionInfos;
-
-        bool init() {
-            if (!collectStructTypes()) return false;
-            if (!collectFunctions()) return false;
-            if (!collectFieldUsages()) return false;
-            return true;
-        }
+        // Using lists instead of vectors, because using vectors didn't let me remove elements?
+        std::list<StructInfo> structInfos;
+        std::list<FunctionInfo> functionInfos;
 
         bool collectStructTypes() {
             llvm::errs() << "Collecting Structs\n";
@@ -59,21 +56,57 @@ namespace Zippy {
             return true;
         }
 
-        bool collectFieldUsages() {
-            llvm::errs() << "Collecting field usages...\n";
-            unsigned allUsages = 0;
-            for (auto structInfo: structInfos) {
-                for (const auto functionInfo: functionInfos) {
-                    structInfo.collectFieldUsages(functionInfo);
+        bool collectFieldUses() {
+            llvm::errs() << "Collecting Field Uses\n";
+            unsigned sumUses = 0;
+            for (auto &structInfo: structInfos) {
+                llvm::errs() << TAB_STR << structInfo.getStructType() << "\n";
+                for (auto &functionInfo: functionInfos) {
+                    const auto uses = structInfo.collectFieldUses(functionInfo);
+                    if (uses == 0) continue;
+                    llvm::errs() << TAB_STR << TAB_STR << functionInfo.getFunction();
+                    llvm::errs() << llvm::format(" [%d] uses\n", uses);
+                    sumUses += uses;
                 }
-                allUsages += structInfo.getSumFieldUsages();
             }
-            if (allUsages == 0) {
-                llvm::errs() << "No field usages collected\n";
+            if (sumUses == 0) {
+                llvm::errs() << "No Field Uses collected\n";
                 return false;
             }
-            llvm::errs() << llvm::format("Collected [%d] field usages\n", allUsages);
+            llvm::errs() << llvm::format("Collected [%d] Field Uses\n", sumUses);
             return true;
+        }
+
+        bool skipUnused() {
+            // Prune unused structs
+            for (auto it = structInfos.begin(); it != structInfos.end();) {
+                if (const auto structInfo = *it; structInfo.getSumFieldUses() == 0) {
+                    llvm::errs() << "Skipping Struct " << structInfo.getStructType() << " no usages found\n";
+                    it = structInfos.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            // Prune unused Functions
+            for (auto it = functionInfos.begin(); it != functionInfos.end();) {
+                if (const auto functionInfo = *it; functionInfo.getNumUsedGepRefs() == 0) {
+                    llvm::errs() << "Skipping Function " << functionInfo.getFunction() << " no usages found\n";
+                    it = functionInfos.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            // Makes sure we still have stuff to work with, otherwise exit
+            auto hasWork = true;
+            if (structInfos.empty()) {
+                llvm::errs() << "All Structs Skipped\n";
+                hasWork = false;
+            }
+            if (functionInfos.empty()) {
+                llvm::errs() << "All Functions Skipped\n";
+                hasWork = false;
+            }
+            return hasWork;
         }
 
     public:
@@ -81,13 +114,18 @@ namespace Zippy {
                       llvm::ModuleAnalysisManager &AM): M(M), AM(AM) {}
 
         llvm::PreservedAnalyses run() {
-            if (!init()) {
-                llvm::errs() << "No work found\n";
-                return llvm::PreservedAnalyses::all();
-            }
-            llvm::errs() << "Getting to work\n";
+            if (!collectStructTypes()) goto no_work;
+            if (!collectFunctions()) goto no_work;
+            if (!collectFieldUses()) goto no_work;
+            if (!skipUnused()) goto no_work;
 
+            llvm::errs() << "Getting to work\n";
             return llvm::PreservedAnalyses::none();
+
+            // No work skip
+        no_work:
+            llvm::errs() << "No work found\n";
+            return llvm::PreservedAnalyses::all();
         }
     };
 

@@ -7,10 +7,13 @@ namespace Zippy {
         Function function;
         std::vector<GetElementPtrInstRef> gepRefs;
 
-        unsigned numFieldUsages;
+        // Tracks the number of gepRefs that we are actually using.
+        // Expected to be the same number as the size of gepRefs or lower,
+        // if a struct that a struct that the gep is referring to is not our own.
+        unsigned numUsedGepRefs;
 
     public:
-        explicit FunctionInfo(const Function function): function(function) {
+        explicit FunctionInfo(const Function function): function(function), numUsedGepRefs(0) {
             // Entry block will start at the first function
             for (auto &inst: function.ptr->getEntryBlock()) {
                 // Collect only gep instructions
@@ -36,8 +39,15 @@ namespace Zippy {
             return function;
         }
 
-        // Returned values have a `StructType` as their source element, no arrays
-        std::vector<GetElementPtrInstRef>& getGepRefs() {
+        unsigned getNumUsedGepRefs() const {
+            return numUsedGepRefs;
+        }
+
+        void incrementUsedGepRefs(const unsigned foundUses) {
+            numUsedGepRefs += foundUses;
+        }
+
+        std::vector<GetElementPtrInstRef> &getGepRefs() {
             return gepRefs;
         }
     };
