@@ -70,3 +70,20 @@ execute_process(
 if(NOT PROC_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to compile output IR")
 endif()
+
+# Runs the input executable
+execute_process(
+        COMMAND ${TEST_DIR}/input
+        RESULT_VARIABLE PROC_RESULT
+)
+
+# Runs the output executable
+execute_process(
+        COMMAND ${TEST_DIR}/output
+        RESULT_VARIABLE PROC_RESULT_2
+)
+
+# Compares the results
+if(NOT PROC_RESULT_2 EQUAL PROC_RESULT)
+    message(FATAL_ERROR "Output changed")
+endif()
