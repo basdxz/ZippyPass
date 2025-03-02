@@ -118,8 +118,28 @@ namespace Zippy {
             if (!collectFunctions()) goto no_work;
             if (!collectFieldUses()) goto no_work;
             if (!skipUnused()) goto no_work;
-
             llvm::errs() << "Getting to work\n";
+
+
+            for (auto structInfo: structInfos) {
+                llvm::errs() << "Processing Struct: ";
+                structInfo.getStructType().printName(llvm::errs());
+                llvm::errs() << " \n";
+                const auto fieldInfos = &structInfo.getFieldInfos();
+
+                // Naive sort by number-of-uses
+                std::sort(fieldInfos->begin(), fieldInfos->end(),
+                          [](const FieldInfo &a, const FieldInfo &b) {
+                              return a.getNumUses() > b.getNumUses();
+                          });
+
+                if (structInfo.applyRemap()) {
+                    llvm::errs() << "YES\n";
+                } else {
+                    llvm::errs() << "NO\n";
+                }
+            }
+
             return llvm::PreservedAnalyses::none();
 
             // No work skip

@@ -11,7 +11,7 @@ namespace Zippy {
 
         StructType structType;
 
-        std::vector<FieldInfo> fields;
+        std::vector<FieldInfo> fieldInfos;
         unsigned sumFieldUses;
 
     public:
@@ -19,7 +19,7 @@ namespace Zippy {
             // Collect all the elements from this struct early
             const auto numElements = structType.ptr->getNumElements();
             for (auto i = 0; i < numElements; i++)
-                fields.emplace_back(structType.getElementType(i), i);
+                fieldInfos.emplace_back(structType.getElementType(i), i);
         }
 
         StructType getStructType() const {
@@ -28,6 +28,10 @@ namespace Zippy {
 
         unsigned getSumFieldUses() const {
             return sumFieldUses;
+        }
+
+        std::vector<FieldInfo> &getFieldInfos() {
+            return fieldInfos;
         }
 
         unsigned collectFieldUses(FunctionInfo& functionInfo) {
@@ -41,7 +45,7 @@ namespace Zippy {
 
                 // Get the field index and add the usage
                 const auto fieldIndex = fieldIndexOperand->getZExtValue();
-                fields[fieldIndex].addUse(gepRef, FIELD_IDX);
+                fieldInfos[fieldIndex].addUse(gepRef, FIELD_IDX);
 
                 // Track uses
                 foundUses++;
@@ -49,6 +53,25 @@ namespace Zippy {
             sumFieldUses += foundUses;
             functionInfo.incrementUsedGepRefs(foundUses);
             return foundUses;
+        }
+
+        bool applyRemap() {
+            auto didWork = false;
+            const auto numFieldInfos = fieldInfos.size();
+            for (auto i = 0; i < numFieldInfos; i++) {
+                didWork |= fieldInfos[i].applyRemap(i);
+            }
+
+            // Early return if no work was done
+            if (!didWork) return false;
+
+            // Replace struct body
+            std::vector<llvm::Type *> newBody;
+            for (auto field: fieldInfos) {
+                newBody.push_back(field.getType().ptr);
+            }
+            structType.ptr->setBody(newBody, structType.ptr->isPacked());
+            return true;
         }
     };
 }
