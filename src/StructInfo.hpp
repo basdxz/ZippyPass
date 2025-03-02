@@ -30,7 +30,7 @@ namespace Zippy {
             return sumFieldUses;
         }
 
-        bool collectFieldUses(FunctionInfo& functionInfo) {
+        unsigned collectFieldUses(FunctionInfo& functionInfo) {
             unsigned foundUses = 0;
             for (const auto &gepRef: functionInfo.getGepRefs()) {
                 // Check if the source element is this struct
