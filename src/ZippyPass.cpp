@@ -80,7 +80,7 @@ namespace Zippy {
         bool skipUnused() {
             // Prune unused structs
             for (auto it = structInfos.begin(); it != structInfos.end();) {
-                if (const auto& structInfo = *it; structInfo.getSumFieldUses() == 0) {
+                if (const auto &structInfo = *it; structInfo.getSumFieldUses() == 0) {
                     llvm::errs() << "Skipping Struct " << structInfo.getStructType() << " no usages found\n";
                     it = structInfos.erase(it);
                 } else {
@@ -89,7 +89,7 @@ namespace Zippy {
             }
             // Prune unused Functions
             for (auto it = functionInfos.begin(); it != functionInfos.end();) {
-                if (const auto& functionInfo = *it; functionInfo.getNumUsedGepRefs() == 0) {
+                if (const auto &functionInfo = *it; functionInfo.getNumUsedGepRefs() == 0) {
                     llvm::errs() << "Skipping Function " << functionInfo.getFunction() << " no usages found\n";
                     it = functionInfos.erase(it);
                 } else {
@@ -128,8 +128,13 @@ namespace Zippy {
                 llvm::errs() << " \n";
 
                 // Naive sort by number-of-uses
-                std::ranges::sort(structInfo.getFieldInfos(), std::greater(), &FieldInfo::getNumUses);
+                std::ranges::sort(
+                    structInfo.getFieldRefs(),
+                    std::greater(),
+                    [](const FieldInfo &f) { return f.getNumUses(); }
+                );
 
+                structInfo.updateTargetIndices();
                 didWork |= structInfo.applyRemap();
             }
 

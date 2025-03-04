@@ -28,17 +28,33 @@ namespace Zippy {
         Type type;
         std::vector<FieldUse> uses;
 
-        unsigned index;
+        unsigned originalIndex;
+        unsigned currentIndex;
+        unsigned targetIndex;
 
     public:
-        explicit FieldInfo(const Type type, const unsigned index): type(type), index(index) {}
+        explicit FieldInfo(const Type type, const unsigned index): type(type), originalIndex(index),
+                                                                   currentIndex(index), targetIndex(index) {}
 
         const Type &getType() const {
             return type;
         }
 
-        unsigned getIndex() const {
-            return index;
+        // Original index as found in the source code
+        unsigned getOriginalIndex() const {
+            return originalIndex;
+        }
+
+        unsigned getCurrentIndex() const {
+            return currentIndex;
+        }
+
+        unsigned getTargetIndex() const {
+            return targetIndex;
+        }
+
+        void setTargetIndex(const unsigned idx) {
+            targetIndex = idx;
         }
 
         void addUse(const GetElementPtrInstRef gepRef, const unsigned operandIndex) {
@@ -53,19 +69,16 @@ namespace Zippy {
             return uses;
         }
 
-        bool applyRemap(const unsigned newIndex) {
+        bool applyRemap() {
             // Skip remap if index is the same
-            if (index == newIndex) return false;
-
+            if (currentIndex == targetIndex) return false;
             // Set current index to the target index
-            index = newIndex;
-
-            // Skip remap if unused
+            currentIndex = targetIndex;
+            // Skip work if field has no uses
             if (uses.empty()) return false;
-
             // Set all new field indices to target index
             for (auto user: uses)
-                user.setFieldIndex(newIndex);
+                user.setFieldIndex(targetIndex);
             return true;
         }
     };

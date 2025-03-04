@@ -10,16 +10,21 @@ namespace Zippy {
         const unsigned FIELD_IDX = 2;
 
         StructType structType;
-
         std::vector<FieldInfo> fieldInfos;
+        std::vector<std::reference_wrapper<FieldInfo>> fieldRefs;
         unsigned sumFieldUses;
 
     public:
         explicit StructInfo(const StructType structType): structType(structType), sumFieldUses(0) {
             // Collect all the elements from this struct early
             const auto numElements = structType.ptr->getNumElements();
-            for (auto i = 0; i < numElements; i++)
+            fieldInfos.reserve(numElements);
+            fieldRefs.reserve(numElements);
+
+            for (auto i = 0; i < numElements; i++) {
                 fieldInfos.emplace_back(structType.getElementType(i), i);
+                fieldRefs.emplace_back(fieldInfos.back());
+            }
         }
 
         const StructType &getStructType() const {
@@ -33,8 +38,8 @@ namespace Zippy {
         /**
          * Can be re-ordered externally, but pretty please don't break it...
          */
-        std::vector<FieldInfo> &getFieldInfos() {
-            return fieldInfos;
+        std::vector<std::reference_wrapper<FieldInfo>> &getFieldRefs() {
+            return fieldRefs;
         }
 
         unsigned collectFieldUses(FunctionInfo& functionInfo) {
@@ -58,11 +63,20 @@ namespace Zippy {
             return foundUses;
         }
 
-        bool applyRemap() {
-            auto didWork = false;
-            const auto numFieldInfos = fieldInfos.size();
+        void updateTargetIndices() const {
+            const auto numFieldInfos = fieldRefs.size();
             for (auto i = 0; i < numFieldInfos; i++) {
-                didWork |= fieldInfos[i].applyRemap(i);
+                fieldRefs[i].get().setTargetIndex(i);
+            }
+        }
+
+        bool applyRemap() const {
+            auto didWork = false;
+            const auto numFieldInfos = fieldRefs.size();
+
+            for (auto i = 0; i < numFieldInfos; i++) {
+                auto &rrr = fieldRefs[i].get();
+                didWork |= fieldRefs[i].get().applyRemap();
             }
 
             // Early return if no work was done
@@ -70,9 +84,12 @@ namespace Zippy {
 
             // Replace struct body
             std::vector<llvm::Type *> newBody;
-            for (auto field: fieldInfos) {
-                newBody.push_back(field.getType().ptr);
+            newBody.reserve(numFieldInfos);
+
+            for (const auto& fieldRef : fieldRefs) {
+                newBody.push_back(fieldRef.get().getType().ptr);
             }
+
             structType.ptr->setBody(newBody, structType.ptr->isPacked());
             return true;
         }
