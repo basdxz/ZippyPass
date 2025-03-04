@@ -22,7 +22,7 @@ namespace Zippy {
                 fieldInfos.emplace_back(structType.getElementType(i), i);
         }
 
-        StructType getStructType() const {
+        const StructType &getStructType() const {
             return structType;
         }
 
@@ -30,6 +30,9 @@ namespace Zippy {
             return sumFieldUses;
         }
 
+        /**
+         * Can be re-ordered externally, but pretty please don't break it...
+         */
         std::vector<FieldInfo> &getFieldInfos() {
             return fieldInfos;
         }

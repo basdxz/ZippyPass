@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ZippyCommon.hpp"
-#include <vector>
 
 namespace Zippy {
     struct FieldUse {
@@ -34,7 +33,7 @@ namespace Zippy {
     public:
         explicit FieldInfo(const Type type, const unsigned index): type(type), index(index) {}
 
-        Type getType() const {
+        const Type &getType() const {
             return type;
         }
 
@@ -50,24 +49,23 @@ namespace Zippy {
             return uses.size();
         }
 
-        std::vector<FieldUse> &getUses() {
+        const std::vector<FieldUse> &getUses() const {
             return uses;
         }
 
         bool applyRemap(const unsigned newIndex) {
-            llvm::errs() << llvm::format("%d:%d\n", index, newIndex);
-
             // Skip remap if index is the same
             if (index == newIndex) return false;
+
+            // Set current index to the target index
+            index = newIndex;
+
             // Skip remap if unused
             if (uses.empty()) return false;
 
             // Set all new field indices to target index
             for (auto user: uses)
                 user.setFieldIndex(newIndex);
-
-            // Set current index to the target index
-            index = newIndex;
             return true;
         }
     };

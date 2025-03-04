@@ -35,7 +35,7 @@ namespace Zippy {
             // Returns false if none have been found
         }
 
-        Function getFunction() const {
+        const Function &getFunction() const {
             return function;
         }
 
@@ -47,7 +47,7 @@ namespace Zippy {
             numUsedGepRefs += foundUses;
         }
 
-        std::vector<GetElementPtrInstRef> &getGepRefs() {
+        const std::vector<GetElementPtrInstRef> &getGepRefs() const {
             return gepRefs;
         }
     };

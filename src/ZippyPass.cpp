@@ -40,7 +40,7 @@ namespace Zippy {
                     continue;
                 }
                 FunctionInfo functionInfo(function);
-                const auto gepRefs = functionInfo.getGepRefs();
+                const auto &gepRefs = functionInfo.getGepRefs();
                 if (gepRefs.empty()) {
                     llvm::errs() << " - No struct references, skipped\n";
                     continue;
@@ -114,34 +114,31 @@ namespace Zippy {
                       llvm::ModuleAnalysisManager &AM): M(M), AM(AM) {}
 
         llvm::PreservedAnalyses run() {
+            auto didWork = false;
+
             if (!collectStructTypes()) goto no_work;
             if (!collectFunctions()) goto no_work;
             if (!collectFieldUses()) goto no_work;
             if (!skipUnused()) goto no_work;
             llvm::errs() << "Getting to work\n";
 
-
             for (auto structInfo: structInfos) {
                 llvm::errs() << "Processing Struct: ";
                 structInfo.getStructType().printName(llvm::errs());
                 llvm::errs() << " \n";
-                const auto fieldInfos = &structInfo.getFieldInfos();
 
                 // Naive sort by number-of-uses
-                std::sort(fieldInfos->begin(), fieldInfos->end(),
-                          [](const FieldInfo &a, const FieldInfo &b) {
-                              return a.getNumUses() > b.getNumUses();
-                          });
+                std::ranges::sort(structInfo.getFieldInfos(), std::greater(), &FieldInfo::getNumUses);
 
-                if (structInfo.applyRemap()) {
-                    llvm::errs() << "YES\n";
-                } else {
-                    llvm::errs() << "NO\n";
-                }
+                didWork |= structInfo.applyRemap();
             }
 
-            return llvm::PreservedAnalyses::none();
+            if (didWork) {
+                llvm::errs() << "Did work\n";
+                return llvm::PreservedAnalyses::none();
+            }
 
+            return llvm::PreservedAnalyses::all();
             // No work skip
         no_work:
             llvm::errs() << "No work found\n";

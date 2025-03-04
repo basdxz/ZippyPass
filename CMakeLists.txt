@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.6)
 project(Zippy)
 
-# LLVM uses C++17.
-set(CMAKE_CXX_STANDARD 17)
+# LLVM uses C++17, but we use C++23 for latest syntax
+set(CMAKE_CXX_STANDARD 23)
 
 # Load LLVMConfig.cmake. If this fails, consider setting `LLVM_DIR` to point
 # to your LLVM installation's `lib/cmake/llvm` directory.
