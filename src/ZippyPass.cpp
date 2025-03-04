@@ -80,7 +80,7 @@ namespace Zippy {
         bool skipUnused() {
             // Prune unused structs
             for (auto it = structInfos.begin(); it != structInfos.end();) {
-                if (const auto structInfo = *it; structInfo.getSumFieldUses() == 0) {
+                if (const auto& structInfo = *it; structInfo.getSumFieldUses() == 0) {
                     llvm::errs() << "Skipping Struct " << structInfo.getStructType() << " no usages found\n";
                     it = structInfos.erase(it);
                 } else {
@@ -89,7 +89,7 @@ namespace Zippy {
             }
             // Prune unused Functions
             for (auto it = functionInfos.begin(); it != functionInfos.end();) {
-                if (const auto functionInfo = *it; functionInfo.getNumUsedGepRefs() == 0) {
+                if (const auto& functionInfo = *it; functionInfo.getNumUsedGepRefs() == 0) {
                     llvm::errs() << "Skipping Function " << functionInfo.getFunction() << " no usages found\n";
                     it = functionInfos.erase(it);
                 } else {
@@ -122,7 +122,7 @@ namespace Zippy {
             if (!skipUnused()) goto no_work;
             llvm::errs() << "Getting to work\n";
 
-            for (auto structInfo: structInfos) {
+            for (auto &structInfo: structInfos) {
                 llvm::errs() << "Processing Struct: ";
                 structInfo.getStructType().printName(llvm::errs());
                 llvm::errs() << " \n";
