@@ -73,7 +73,7 @@ namespace Zippy {
                 llvm::errs() << " \n";
 
                 // Naive sort by number-of-uses
-                std::ranges::sort(structInfo.getFieldInfos(), std::greater(), &FieldInfo::getTargetIndex);
+                std::ranges::sort(structInfo.getFieldInfos(), std::greater(), &FieldInfo::getNumUses);
 
                 structInfo.updateTargetIndices();
                 didWork |= structInfo.applyRemap();
