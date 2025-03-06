@@ -6,7 +6,7 @@
 #include <llvm/Pass.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Passes/PassPlugin.h>
-#include <llvm/IR/Module.h>
+
 
 namespace Zippy {
     class Pass {
@@ -14,47 +14,17 @@ namespace Zippy {
         llvm::ModuleAnalysisManager &AM;
 
         // Using lists instead of vectors, because using vectors didn't let me remove elements?
-        std::list<StructInfo> structInfos;
-        std::list<FunctionInfo> functionInfos;
+        std::vector<StructInfo> structInfos;
+        std::vector<FunctionInfo> functionInfos;
 
         bool collectStructTypes() {
-            llvm::errs() << "Collecting Structs\n";
-            for (const auto structType: M.getIdentifiedStructTypes()) {
-                auto structInfo = structInfos.emplace_back(StructType{structType});
-                llvm::errs() << TAB_STR << structInfo.getStructType() << "\n";
-            }
-            if (structInfos.empty()) {
-                llvm::errs() << "No Structs collected\n";
-                return false;
-            }
-            llvm::errs() << llvm::format("Collected [%d] Structs\n", structInfos.size());
-            return true;
+            structInfos = StructInfo::collect(M);
+            return !structInfos.empty();
         }
 
         bool collectFunctions() {
-            llvm::errs() << "Collecting Function\n";
-            for (auto &functionRaw: M.functions()) {
-                Function function{&functionRaw};
-                llvm::errs() << TAB_STR << function;
-                if (!function.isDefined()) {
-                    llvm::errs() << " - Not defined, skipped\n";
-                    continue;
-                }
-                FunctionInfo functionInfo(function);
-                const auto &gepRefs = functionInfo.getGepRefs();
-                if (gepRefs.empty()) {
-                    llvm::errs() << " - No struct references, skipped\n";
-                    continue;
-                }
-                functionInfos.push_back(functionInfo);
-                llvm::errs() << llvm::format(" - Found [%d] GEPs\n", gepRefs.size());
-            }
-            if (functionInfos.empty()) {
-                llvm::errs() << "No Functions collected\n";
-                return false;
-            }
-            llvm::errs() << llvm::format("Collected [%d] Functions\n", functionInfos.size());
-            return true;
+            functionInfos = FunctionInfo::collect(M);
+            return !functionInfos.empty();
         }
 
         bool collectFieldUses() {
@@ -78,49 +48,23 @@ namespace Zippy {
             return true;
         }
 
-        bool skipUnused() {
-            // Prune unused structs
-            for (auto it = structInfos.begin(); it != structInfos.end();) {
-                if (const auto &structInfo = *it; structInfo.getSumFieldUses() == 0) {
-                    llvm::errs() << "Skipping Struct " << structInfo.getStructType() << " no usages found\n";
-                    it = structInfos.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            // Prune unused Functions
-            for (auto it = functionInfos.begin(); it != functionInfos.end();) {
-                if (const auto &functionInfo = *it; functionInfo.getNumUsedGepRefs() == 0) {
-                    llvm::errs() << "Skipping Function " << functionInfo.getFunction() << " no usages found\n";
-                    it = functionInfos.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            // Makes sure we still have stuff to work with, otherwise exit
-            auto hasWork = true;
-            if (structInfos.empty()) {
-                llvm::errs() << "All Structs Skipped\n";
-                hasWork = false;
-            }
-            if (functionInfos.empty()) {
-                llvm::errs() << "All Functions Skipped\n";
-                hasWork = false;
-            }
-            return hasWork;
-        }
-
     public:
         explicit Pass(llvm::Module &M,
                       llvm::ModuleAnalysisManager &AM): M(M), AM(AM) {}
 
         llvm::PreservedAnalyses run() {
+            for (auto &globalVarRaw: M.globals()) {
+                const GlobalVariable globalVar = {&globalVarRaw};
+                if (globalVar.isNonZeroInit()) {
+                    llvm::errs() << globalVar << "\n";
+                }
+            }
+
             auto didWork = false;
 
             if (!collectStructTypes()) goto no_work;
             if (!collectFunctions()) goto no_work;
             if (!collectFieldUses()) goto no_work;
-            if (!skipUnused()) goto no_work;
             llvm::errs() << "Getting to work\n";
 
             for (auto &structInfo: structInfos) {
@@ -129,11 +73,7 @@ namespace Zippy {
                 llvm::errs() << " \n";
 
                 // Naive sort by number-of-uses
-                std::ranges::sort(
-                    structInfo.getFieldRefs(),
-                    std::greater(),
-                    [](const FieldInfo &f) { return f.getNumUses(); }
-                );
+                std::ranges::sort(structInfo.getFieldInfos(), std::greater(), &FieldInfo::getTargetIndex);
 
                 structInfo.updateTargetIndices();
                 didWork |= structInfo.applyRemap();

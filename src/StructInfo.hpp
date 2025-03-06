@@ -11,20 +11,33 @@ namespace Zippy {
 
         StructType structType;
         std::vector<FieldInfo> fieldInfos;
-        std::vector<std::reference_wrapper<FieldInfo>> fieldRefs;
         unsigned sumFieldUses;
 
-    public:
         explicit StructInfo(const StructType structType): structType(structType), sumFieldUses(0) {
             // Collect all the elements from this struct early
             const auto numElements = structType.ptr->getNumElements();
             fieldInfos.reserve(numElements);
-            fieldRefs.reserve(numElements);
 
             for (auto i = 0; i < numElements; i++) {
                 fieldInfos.emplace_back(structType.getElementType(i), i);
-                fieldRefs.emplace_back(fieldInfos.back());
             }
+        }
+
+    public:
+        static std::vector<StructInfo> collect(llvm::Module &M) {
+            llvm::errs() << "Collecting Structs\n";
+            std::vector<StructInfo> structInfos;
+            for (const auto structType: M.getIdentifiedStructTypes()) {
+                auto structInfo = StructInfo(StructType{structType});
+                structInfos.push_back(structInfo);
+                llvm::errs() << TAB_STR << structInfo.getStructType() << "\n";
+            }
+            if (structInfos.empty()) {
+                llvm::errs() << "No Structs collected\n";
+            } else {
+                llvm::errs() << llvm::format("Collected [%d] Structs\n", structInfos.size());
+            }
+            return std::move(structInfos);
         }
 
         const StructType &getStructType() const {
@@ -38,8 +51,8 @@ namespace Zippy {
         /**
          * Can be re-ordered externally, but pretty please don't break it...
          */
-        std::vector<std::reference_wrapper<FieldInfo>> &getFieldRefs() {
-            return fieldRefs;
+        std::vector<FieldInfo> &getFieldInfos() {
+            return fieldInfos;
         }
 
         unsigned collectFieldUses(FunctionInfo& functionInfo) {
@@ -63,20 +76,19 @@ namespace Zippy {
             return foundUses;
         }
 
-        void updateTargetIndices() const {
-            const auto numFieldInfos = fieldRefs.size();
+        void updateTargetIndices() {
+            const auto numFieldInfos = fieldInfos.size();
             for (auto i = 0; i < numFieldInfos; i++) {
-                fieldRefs[i].get().setTargetIndex(i);
+                fieldInfos[i].setTargetIndex(i);
             }
         }
 
-        bool applyRemap() const {
+        bool applyRemap() {
             auto didWork = false;
-            const auto numFieldInfos = fieldRefs.size();
+            const auto numFieldInfos = fieldInfos.size();
 
             for (auto i = 0; i < numFieldInfos; i++) {
-                auto &rrr = fieldRefs[i].get();
-                didWork |= fieldRefs[i].get().applyRemap();
+                didWork |= fieldInfos[i].applyRemap();
             }
 
             // Early return if no work was done
@@ -86,8 +98,8 @@ namespace Zippy {
             std::vector<llvm::Type *> newBody;
             newBody.reserve(numFieldInfos);
 
-            for (const auto& fieldRef : fieldRefs) {
-                newBody.push_back(fieldRef.get().getType().ptr);
+            for (const auto& fieldInfo : fieldInfos) {
+                newBody.push_back(fieldInfo.getType().ptr);
             }
 
             structType.ptr->setBody(newBody, structType.ptr->isPacked());

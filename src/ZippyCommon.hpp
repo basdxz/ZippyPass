@@ -5,7 +5,8 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/Support/Casting.h>
-
+#include <llvm/Support/Format.h>
+#include <llvm/IR/Module.h>
 
 namespace Zippy {
     const std::string NO_VAL_NAME_STR = "???";
