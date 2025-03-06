@@ -3,6 +3,7 @@
 #include <llvm/IR/PassManager.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/Support/Casting.h>
 
 
@@ -36,6 +37,18 @@ namespace Zippy {
 
         void printName(llvm::raw_ostream &OS) const {
             OS << (ptr->hasName() ? ptr->getName() : NO_VAL_NAME_STR);
+        }
+    };
+
+    struct GlobalVariable {
+        llvm::GlobalVariable *const ptr;
+
+        bool isNonZeroInit() const {
+            return ptr->hasInitializer() ? !ptr->getInitializer()->isZeroValue() : false;
+        }
+
+        bool isStructType() const {
+            return ptr->getValueType()->isStructTy();
         }
     };
 
@@ -163,6 +176,11 @@ namespace llvm {
         }
 
         out << ")";
+        return out;
+    }
+
+    inline raw_ostream &operator<<(raw_ostream &out, const Zippy::GlobalVariable globalVar) {
+        globalVar.ptr->print(out, true);
         return out;
     }
 }
