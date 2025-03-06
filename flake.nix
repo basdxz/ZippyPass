@@ -17,7 +17,7 @@
           packages = with pkgs; [
             cmake
             clang
-            llvm_18
+            llvm_19
           ];
         };
       });
