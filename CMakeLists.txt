@@ -4,6 +4,14 @@ project(Zippy)
 # LLVM uses C++17, but we use C++23 for latest syntax
 set(CMAKE_CXX_STANDARD 23)
 
+# Include ccache if present
+find_program(CCACHE_EXE ccache)
+if(CCACHE_EXE)
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_EXE}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_EXE}")
+    message(STATUS "Using ccache: ${CCACHE_EXE}")
+endif()
+
 # Load LLVMConfig.cmake. If this fails, consider setting `LLVM_DIR` to point
 # to your LLVM installation's `lib/cmake/llvm` directory.
 find_package(LLVM REQUIRED CONFIG)

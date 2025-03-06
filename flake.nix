@@ -11,14 +11,23 @@
     in {
       devShells = forEachSupportedSystem ({ pkgs }: {
         default = pkgs.mkShell {
-        # Disables Fortification, as it does not work with -O0
-        # https://www.gnu.org/software/libc/manual/html_node/Source-Fortification.html
-        hardeningDisable = [ "fortify" ];
+          # Disables Fortification, as it does not work with -O0
+          # https://www.gnu.org/software/libc/manual/html_node/Source-Fortification.html
+          hardeningDisable = [ "fortify" ];
           packages = with pkgs; [
             cmake
-            clang
+            ninja
+            ccache
+            clang_19
             llvm_19
           ];
+          shellHook = ''
+            export CMAKE_GENERATOR="Ninja"
+            export CMAKE_MAKE_PROGRAM="${pkgs.ninja}/bin/ninja"
+
+            export CC="${pkgs.clang_19}/bin/clang"
+            export CXX="${pkgs.clang_19}/bin/clang++"
+          '';
         };
       });
     };
