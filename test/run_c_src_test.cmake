@@ -46,6 +46,7 @@ endif()
 # EG: `clang input.ll -o input`
 execute_process(
         COMMAND ${CLANG_EXE}
+        -Qunused-arguments # Here to silence NixOS Noise
         ${TEST_DIR}/input.ll
         -o ${TEST_DIR}/input
         RESULT_VARIABLE PROC_RESULT
@@ -61,6 +62,7 @@ endif()
 # EG: `clang output.ll -o output`
 execute_process(
         COMMAND ${CLANG_EXE}
+        -Qunused-arguments # Here to silence NixOS Noise
         ${TEST_DIR}/output.ll
         -o ${TEST_DIR}/output
         RESULT_VARIABLE PROC_RESULT
