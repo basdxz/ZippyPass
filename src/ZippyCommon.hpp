@@ -12,11 +12,11 @@ namespace Zippy {
     const std::string TAB_STR = "    ";
 
     struct Type {
-        llvm::Type *ptr;
+        llvm::Type *const ptr;
     };
 
     struct StructType {
-        llvm::StructType *ptr;
+        llvm::StructType *const ptr;
 
         void printName(llvm::raw_ostream &OS) const {
             OS << (ptr->hasName() ? ptr->getName().ltrim("struct.") : NO_VAL_NAME_STR);
@@ -28,7 +28,7 @@ namespace Zippy {
     };
 
     struct Function {
-        llvm::Function *ptr;
+        llvm::Function *const ptr;
 
         bool isDefined() const {
             return !ptr->isDeclaration();
@@ -40,9 +40,9 @@ namespace Zippy {
     };
 
     struct GetElementPtrInstRef {
-        llvm::GetElementPtrInst *ptr;
+        llvm::GetElementPtrInst *const ptr;
         // Is GEP result is used in a store
-        bool isWrite;
+        const bool isWrite;
 
         bool isSameSourceStructType(StructType const &structType) const {
             return structType.ptr == ptr->getSourceElementType();
