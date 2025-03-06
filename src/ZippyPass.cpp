@@ -6,6 +6,7 @@
 #include <llvm/Pass.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Passes/PassPlugin.h>
+#include <llvm/IR/Module.h>
 
 namespace Zippy {
     class Pass {
