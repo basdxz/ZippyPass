@@ -3,6 +3,7 @@
 #include "ZippyCommon.hpp"
 #include "FieldInfo.hpp"
 #include "FunctionInfo.hpp"
+#include "GlobalVarInfo.hpp"
 
 namespace Zippy {
     class StructInfo {
@@ -11,6 +12,9 @@ namespace Zippy {
 
         StructType structType;
         std::vector<FieldInfo> fieldInfos;
+        std::vector<GlobalVarInfo> globalVarInfos;
+
+        std::vector<unsigned> remapTable;
         unsigned sumFieldUses;
 
         explicit StructInfo(const StructType structType): structType(structType), sumFieldUses(0) {
@@ -20,6 +24,12 @@ namespace Zippy {
 
             for (auto i = 0; i < numElements; i++) {
                 fieldInfos.emplace_back(structType.getElementType(i), i);
+            }
+
+            // Pre-generate identity remap table
+            remapTable.reserve(numElements);
+            for (auto i = 0; i < numElements; ++i) {
+                remapTable.emplace_back(i);
             }
         }
 
@@ -55,13 +65,13 @@ namespace Zippy {
             return fieldInfos;
         }
 
-        unsigned collectFieldUses(FunctionInfo& functionInfo) {
+        unsigned collectFieldUses(FunctionInfo &functionInfo) {
             unsigned foundUses = 0;
             for (const auto &gepRef: functionInfo.getGepRefs()) {
                 // Check if the source element is this struct
-                if (!gepRef.isSameSourceStructType(structType)) continue;
+                if (!gepRef->isSameSourceStructType(structType)) continue;
                 // Get the operand and validate that it is indeed, a `ConstantInt`
-                const auto *fieldIndexOperand = llvm::dyn_cast<llvm::ConstantInt>(gepRef.ptr->getOperand(FIELD_IDX));
+                const auto *fieldIndexOperand = llvm::dyn_cast<llvm::ConstantInt>(gepRef->getOperand(FIELD_IDX));
                 if (!fieldIndexOperand) continue;
 
                 // Get the field index and add the usage
@@ -76,10 +86,39 @@ namespace Zippy {
             return foundUses;
         }
 
+        unsigned collectGlobalVars(std::vector<GlobalVarInfo> &allGlobalVarInfos) {
+            llvm::errs() << TAB_STR << "For Struct: ";
+            structType.printName(llvm::errs());
+            llvm::errs() << "\n";
+            auto varsCollected = 0;
+            for (auto &globalVarInfo: allGlobalVarInfos) {
+                if (globalVarInfo.getValueType().ptr != structType.ptr) continue;
+                globalVarInfos.push_back(globalVarInfo);
+                llvm::errs() << TAB_STR << TAB_STR << "Collected: ";
+                globalVarInfo.getGlobalVar().printName(llvm::errs());
+                llvm::errs() << "\n";
+                varsCollected++;
+            }
+            if (varsCollected == 0) {
+                llvm::errs() << TAB_STR << "None collected\n";
+            } else {
+                llvm::errs() << TAB_STR << llvm::format("Collected [%d] Global Variables\n", varsCollected);
+            }
+            return varsCollected;
+        }
+
         void updateTargetIndices() {
+            llvm::errs() << "Updating Target Indicies\n";
+
             const auto numFieldInfos = fieldInfos.size();
             for (auto i = 0; i < numFieldInfos; i++) {
-                fieldInfos[i].setTargetIndex(i);
+                auto &fieldInfo = fieldInfos[i];
+                remapTable[i] = fieldInfo.getCurrentIndex();
+                fieldInfo.setTargetIndex(i);
+            }
+
+            for (int i = 0; i < numFieldInfos; ++i) {
+                llvm::errs() << llvm::format("%d->%d\n", i, remapTable[i]);
             }
         }
 
@@ -94,15 +133,19 @@ namespace Zippy {
             // Early return if no work was done
             if (!didWork) return false;
 
-            // Replace struct body
-            std::vector<llvm::Type *> newBody;
+            // Creating and populating the new struct body
+            std::vector<llvm::Type*> newBody;
             newBody.reserve(numFieldInfos);
-
-            for (const auto& fieldInfo : fieldInfos) {
+            for (const auto &fieldInfo: fieldInfos) {
                 newBody.push_back(fieldInfo.getType().ptr);
             }
-
+            // Replace struct body
             structType.ptr->setBody(newBody, structType.ptr->isPacked());
+
+            // Remapping global variables
+            for (auto &globalVarInfo: globalVarInfos) {
+                globalVarInfo.remap(remapTable);
+            }
             return true;
         }
     };

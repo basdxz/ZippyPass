@@ -3,6 +3,7 @@
 // The optimization should reorder fields to prioritize frequently accessed ones
 
 typedef struct {
+    int never_used;
     int rarely_used1; // Cold field
     long frequently_used1; // Hot field
     int frequently_used2; // Hot field
@@ -38,12 +39,6 @@ int process_struct(HotColdStruct *data) {
 }
 
 int main() {
-    HotColdStruct data;
-    data.rarely_used1 = 1;
-    data.frequently_used1 = 2;
-    data.frequently_used2 = 3;
-    data.rarely_used2 = 4;
-    data.frequently_used3 = 5;
-    data.rarely_used3 = 6;
+    HotColdStruct data = {0, 1, 2, 3, 4, 5, 6};
     return process_struct(&data);
 }

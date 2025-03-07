@@ -1,11 +1,16 @@
 #pragma once
 
+#include <set>
+
 #include "ZippyCommon.hpp"
+#include "GetElementPtrRef.hpp"
 
 namespace Zippy {
     class FunctionInfo {
         Function function;
-        std::vector<GetElementPtrInstRef> gepRefs;
+
+        // Shared pointers are used as GetElementPtrRef has children structs
+        std::vector<std::shared_ptr<GetElementPtrRef>> gepRefs;
 
         // Tracks the number of gepRefs that we are actually using.
         // Expected to be the same number as the size of gepRefs or lower,
@@ -13,25 +18,59 @@ namespace Zippy {
         unsigned numUsedGepRefs;
 
         explicit FunctionInfo(const Function function): function(function), numUsedGepRefs(0) {
-            // Entry block will start at the first function
-            for (auto &inst: function.ptr->getEntryBlock()) {
-                // Collect only gep instructions
-                auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(&inst);
-                if (!gepInst) continue;
-                // Fewer than three operands mean that this gep is just an array index
-                if (gepInst->getNumOperands() < 3) continue;
-                // Our source element will only ever be struct types
-                if (!llvm::isa<llvm::StructType>(gepInst->getSourceElementType())) continue;
+            const auto ptr = function.ptr;
+            // TODO: I suspect this will capture duplicate instructions...
+            for (llvm::inst_iterator I = inst_begin(ptr), E = inst_end(ptr); I != E; ++I) {
+                llvm::Instruction *inst = &*I;
 
-                // Check for uses by a `StoreInst` as that would indicate writing
-                auto isWrite = false;
-                for (const auto user: gepInst->users())
-                    if (isWrite = llvm::isa<llvm::StoreInst>(user); isWrite) break;
+                // Handle explicit GEP instructions
+                if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
+                    processGEPInst(gepInst);
+                }
 
-                // Put it in the big list
-                gepRefs.emplace_back(gepInst, isWrite);
+                for (auto &operand: inst->operands()) {
+                    if (auto *gepExpr = llvm::dyn_cast<llvm::GEPOperator>(operand)) {
+                        // Convert GEPOperator to GEPInst for consistent handling
+                        processGEPOperator(gepExpr, inst);
+                    }
+                }
             }
-            // Returns false if none have been found
+        }
+
+        void processGEPInst(llvm::GetElementPtrInst *gepInst) {
+            // Skip if fewer than three operands (array indexing only)
+            if (gepInst->getNumOperands() < 3) return;
+
+            // Our source element needs to be a struct type
+            if (!llvm::isa<llvm::StructType>(gepInst->getSourceElementType())) return;
+
+            // Check for uses by a `StoreInst` as that would indicate writing
+            auto isWrite = false;
+            for (const auto user: gepInst->users())
+                if (isWrite = llvm::isa<llvm::StoreInst>(user); isWrite) break;
+
+            // Add it to the collection
+            gepRefs.push_back(std::make_shared<GetElementPtrInstRef>(gepInst, isWrite));
+        }
+
+        void processGEPOperator(llvm::GEPOperator *gepOp, llvm::Instruction *parentInst) {
+            // Skip if fewer than three operands (array indexing only)
+            if (gepOp->getNumOperands() < 3) return;
+
+            // Our source element needs to be a struct type
+            if (!llvm::isa<llvm::StructType>(gepOp->getSourceElementType())) return;
+
+            // Check if this is used for writing by looking at parent instruction
+            auto isWrite = false;
+            if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(parentInst)) {
+                // If the GEP is the destination of a store, it's a write
+                if (storeInst->getPointerOperand() == gepOp) {
+                    isWrite = true;
+                }
+            }
+
+            // Add it to the collection
+            gepRefs.push_back(std::make_shared<GetElementPtrOpRef>(gepOp, isWrite));
         }
 
     public:
@@ -74,7 +113,7 @@ namespace Zippy {
             numUsedGepRefs += foundUses;
         }
 
-        const std::vector<GetElementPtrInstRef> &getGepRefs() const {
+        const std::vector<std::shared_ptr<GetElementPtrRef>> &getGepRefs() const {
             return gepRefs;
         }
     };

@@ -1,26 +1,27 @@
 #pragma once
 
 #include "ZippyCommon.hpp"
+#include "GetElementPtrRef.hpp"
 
 namespace Zippy {
     struct FieldUse {
-        GetElementPtrInstRef gepRef;
+        std::shared_ptr<GetElementPtrRef> gepRef;
         unsigned operandIndex;
 
-        FieldUse(const GetElementPtrInstRef gepRef,
+        FieldUse(const std::shared_ptr<GetElementPtrRef> &gepRef,
                  const unsigned operandIndex): gepRef(gepRef),
                                                operandIndex(operandIndex) {}
 
         uint64_t getFieldIndex() const {
-            return gepRef.getOperand(operandIndex)->getZExtValue();
+            return gepRef->getOperand(operandIndex)->getZExtValue();
         }
 
         void setFieldIndex(const uint64_t index) const {
             // In LLVM, for some reason to create a `ConstantInt`, we need a reference to the type?
             // But the only way I've found to reliably get the reference, has been to have the old value on hand.
             // Thus, we need to *read* the original value, get the type, then use that to create the *new* type.
-            const auto operandType = gepRef.getOperand(operandIndex)->getIntegerType();
-            gepRef.setOperand(operandIndex, llvm::ConstantInt::get(operandType, index));
+            const auto operandType = gepRef->getOperand(operandIndex)->getIntegerType();
+            gepRef->setOperand(operandIndex, llvm::ConstantInt::get(operandType, index));
         }
     };
 
@@ -57,7 +58,7 @@ namespace Zippy {
             targetIndex = idx;
         }
 
-        void addUse(const GetElementPtrInstRef gepRef, const unsigned operandIndex) {
+        void addUse(std::shared_ptr<GetElementPtrRef> gepRef, const unsigned operandIndex) {
             uses.emplace_back(gepRef, operandIndex);
         }
 

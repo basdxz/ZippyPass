@@ -1,7 +1,9 @@
 add_llvm_pass_plugin(ZippyPass
         ZippyCommon.hpp
+        GetElementPtrRef.hpp
         FunctionInfo.hpp
         FieldInfo.hpp
+        GlobalVarInfo.hpp
         StructInfo.hpp
         ZippyPass.cpp
 )

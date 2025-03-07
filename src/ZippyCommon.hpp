@@ -4,9 +4,11 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/Operator.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Format.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/InstIterator.h>
 
 namespace Zippy {
     const std::string NO_VAL_NAME_STR = "???";
@@ -44,33 +46,16 @@ namespace Zippy {
     struct GlobalVariable {
         llvm::GlobalVariable *ptr;
 
-        bool isNonZeroInit() const {
-            return ptr->hasInitializer() ? !ptr->getInitializer()->isZeroValue() : false;
+        bool isZeroInit() const {
+            return ptr->hasInitializer() ? ptr->getInitializer()->isZeroValue() : true;
         }
 
         bool isStructType() const {
             return ptr->getValueType()->isStructTy();
         }
-    };
 
-    struct GetElementPtrInstRef {
-        llvm::GetElementPtrInst *ptr;
-        // Is GEP result is used in a store
-        bool isWrite;
-
-        bool isSameSourceStructType(StructType const &structType) const {
-            return structType.ptr == ptr->getSourceElementType();
-        }
-
-        GetElementPtrInstRef(llvm::GetElementPtrInst *ptr,
-                             const bool isWrite): ptr(ptr), isWrite(isWrite) {}
-
-        llvm::ConstantInt *getOperand(const unsigned operandIndex) const {
-            return llvm::cast<llvm::ConstantInt>(ptr->getOperand(operandIndex));
-        }
-
-        void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) const {
-            ptr->setOperand(operandIndex, operand);
+        void printName(llvm::raw_ostream &OS) const {
+            OS << (ptr->hasName() ? ptr->getName() : NO_VAL_NAME_STR);
         }
     };
 }

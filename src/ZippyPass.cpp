@@ -1,6 +1,7 @@
 #include "ZippyCommon.hpp"
 #include "FunctionInfo.hpp"
 #include "FieldInfo.hpp"
+#include "GlobalVarInfo.hpp"
 #include "StructInfo.hpp"
 
 #include <llvm/Pass.h>
@@ -48,23 +49,32 @@ namespace Zippy {
             return true;
         }
 
+        void collectGlobalVars() {
+            auto globalVarInfos = GlobalVarInfo::collect(M);
+            if (globalVarInfos.empty()) return;
+            auto varsCollected = 0;
+            llvm::errs() << "Collecting Global Variables into Structs\n";
+            for (auto &structInfo: structInfos) {
+                varsCollected += structInfo.collectGlobalVars(globalVarInfos);
+            }
+            if (varsCollected == 0) {
+                llvm::errs() << "None collected\n";
+            } else {
+                llvm::errs() << llvm::format("Collected [%d] Total Global Variables\n", varsCollected);
+            }
+        }
+
     public:
         explicit Pass(llvm::Module &M,
                       llvm::ModuleAnalysisManager &AM): M(M), AM(AM) {}
 
         llvm::PreservedAnalyses run() {
-            for (auto &globalVarRaw: M.globals()) {
-                const GlobalVariable globalVar = {&globalVarRaw};
-                if (globalVar.isNonZeroInit()) {
-                    llvm::errs() << globalVar << "\n";
-                }
-            }
-
             auto didWork = false;
 
             if (!collectStructTypes()) goto no_work;
             if (!collectFunctions()) goto no_work;
             if (!collectFieldUses()) goto no_work;
+            collectGlobalVars();
             llvm::errs() << "Getting to work\n";
 
             for (auto &structInfo: structInfos) {
