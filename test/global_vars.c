@@ -32,12 +32,7 @@ void foop() {
     zap(g_no_init);
 }
 
-int main() {
-    foop();
-
-    const HotColdStruct l_constVar = {15, 0, 35, 45, 55, 65};
-    HotColdStruct l_regularVar = {105, 0, 305, 405, 505, 605};
-
+double getFooSum() {
     double foo_0 = g_constVar.rarely_used1 + g_regularVar.rarely_used1;
     double foo_1 = g_constVar.frequently_used1 + g_regularVar.frequently_used1;
     double foo_2 = g_constVar.frequently_used2 + g_regularVar.frequently_used2;
@@ -46,7 +41,17 @@ int main() {
     double foo_5 = g_constVar.rarely_used3 + g_regularVar.rarely_used3;
 
     double foo = foo_0 + foo_1 + foo_2 + foo_3 + foo_4 + foo_5;
+    return foo;
+}
+
+int main() {
+    foop();
+
+    double foo = getFooSum();
     printf("foo:%f\n", foo);
+
+    const HotColdStruct l_constVar = {15, 0, 35, 45, 55, 65};
+    HotColdStruct l_regularVar = {105, 0, 305, 405, 505, 605};
 
     double bar_0 = l_constVar.rarely_used1 + l_regularVar.rarely_used1;
     double bar_1 = l_constVar.frequently_used1 + l_regularVar.frequently_used1;

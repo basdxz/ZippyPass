@@ -1,6 +1,6 @@
 typedef struct Point {
-   int x;
-   int y;
+   int ziggy;
+   int zaggy;
 } Point;
 
 int foo() {

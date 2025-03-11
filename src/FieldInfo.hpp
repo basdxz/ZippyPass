@@ -6,21 +6,30 @@
 namespace Zippy {
     struct FieldUse {
         std::shared_ptr<GetElementPtrRef> gepRef;
+        // Operator index is separate from the field index, as GEPs may reference a nested field (not implemented atm)
         unsigned operandIndex;
 
         FieldUse(const std::shared_ptr<GetElementPtrRef> &gepRef,
                  const unsigned operandIndex): gepRef(gepRef),
                                                operandIndex(operandIndex) {}
 
+        bool isWrite() {
+            return gepRef->isWrite;
+        }
+
         uint64_t getFieldIndex() const {
             return gepRef->getOperand(operandIndex)->getZExtValue();
         }
 
         void setFieldIndex(const uint64_t index) const {
+            const auto oldOperand = gepRef->getOperand(operandIndex);
+            // Early return if no work needs to be done, happens due to some duplication jank
+            if (oldOperand->getZExtValue() == index) return;
+
             // In LLVM, for some reason to create a `ConstantInt`, we need a reference to the type?
             // But the only way I've found to reliably get the reference, has been to have the old value on hand.
             // Thus, we need to *read* the original value, get the type, then use that to create the *new* type.
-            const auto operandType = gepRef->getOperand(operandIndex)->getIntegerType();
+            const auto operandType = oldOperand->getIntegerType();
             gepRef->setOperand(operandIndex, llvm::ConstantInt::get(operandType, index));
         }
     };

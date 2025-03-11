@@ -9,6 +9,7 @@
 #include <llvm/Support/Format.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/InstIterator.h>
+#include <llvm/IR/IRBuilder.h>
 
 namespace Zippy {
     const std::string NO_VAL_NAME_STR = "???";

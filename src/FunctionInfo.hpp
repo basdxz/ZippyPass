@@ -12,65 +12,71 @@ namespace Zippy {
         // Shared pointers are used as GetElementPtrRef has children structs
         std::vector<std::shared_ptr<GetElementPtrRef>> gepRefs;
 
+        // Tracking for found refs
+        unsigned numGEPInst;
+        unsigned numGEPOps;
+        unsigned numDirectRefs;
+
         // Tracks the number of gepRefs that we are actually using.
-        // Expected to be the same number as the size of gepRefs or lower,
-        // if a struct that a struct that the gep is referring to is not our own.
         unsigned numUsedGepRefs;
 
-        explicit FunctionInfo(const Function function): function(function), numUsedGepRefs(0) {
+        explicit FunctionInfo(const Function function): function(function), numGEPInst(0), numGEPOps(0),
+                                                        numDirectRefs(0), numUsedGepRefs(0) {
             const auto ptr = function.ptr;
-            // TODO: I suspect this will capture duplicate instructions...
+            // Scan all instructions in the function, we do it like it's done in the spec
             for (llvm::inst_iterator I = inst_begin(ptr), E = inst_end(ptr); I != E; ++I) {
                 llvm::Instruction *inst = &*I;
 
-                // Handle explicit GEP instructions
-                if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
-                    processGEPInst(gepInst);
-                }
-
-                for (auto &operand: inst->operands()) {
-                    if (auto *gepExpr = llvm::dyn_cast<llvm::GEPOperator>(operand)) {
-                        // Convert GEPOperator to GEPInst for consistent handling
-                        processGEPOperator(gepExpr, inst);
-                    }
+                // Only handle Load and Store Instructions
+                if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(inst)) {
+                    processLoadOrStore(inst, loadInst->getPointerOperand(), false);
+                } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(inst)) {
+                    processLoadOrStore(inst, storeInst->getPointerOperand(), true);
                 }
             }
         }
 
-        void processGEPInst(llvm::GetElementPtrInst *gepInst) {
+        void processLoadOrStore(llvm::Instruction *inst, llvm::Value *ptrOperand, const bool isWrite) {
+            // Branching based on known ways the actual field reference could be used
+            if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(ptrOperand)) {
+                // As a GEP Instruction
+                processGEPInst(gepInst, isWrite);
+            } else if (auto *gepOp = llvm::dyn_cast<llvm::GEPOperator>(ptrOperand)) {
+                // As a GEP Operator
+                processGEPOperator(gepOp, isWrite);
+            } else if (const auto *globalVar = llvm::dyn_cast<llvm::GlobalVariable>(ptrOperand)) {
+                // As a Direct Reference (only handling global variables for now)
+                processDirectRef(inst, globalVar, isWrite);
+            }
+        }
+
+        void processGEPInst(llvm::GetElementPtrInst *gepInst, bool isWrite) {
             // Skip if fewer than three operands (array indexing only)
             if (gepInst->getNumOperands() < 3) return;
-
             // Our source element needs to be a struct type
             if (!llvm::isa<llvm::StructType>(gepInst->getSourceElementType())) return;
-
-            // Check for uses by a `StoreInst` as that would indicate writing
-            auto isWrite = false;
-            for (const auto user: gepInst->users())
-                if (isWrite = llvm::isa<llvm::StoreInst>(user); isWrite) break;
-
             // Add it to the collection
             gepRefs.push_back(std::make_shared<GetElementPtrInstRef>(gepInst, isWrite));
+            numGEPInst++;
         }
 
-        void processGEPOperator(llvm::GEPOperator *gepOp, llvm::Instruction *parentInst) {
+        void processGEPOperator(llvm::GEPOperator *gepOp, bool isWrite) {
             // Skip if fewer than three operands (array indexing only)
             if (gepOp->getNumOperands() < 3) return;
-
             // Our source element needs to be a struct type
             if (!llvm::isa<llvm::StructType>(gepOp->getSourceElementType())) return;
-
-            // Check if this is used for writing by looking at parent instruction
-            auto isWrite = false;
-            if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(parentInst)) {
-                // If the GEP is the destination of a store, it's a write
-                if (storeInst->getPointerOperand() == gepOp) {
-                    isWrite = true;
-                }
-            }
-
             // Add it to the collection
             gepRefs.push_back(std::make_shared<GetElementPtrOpRef>(gepOp, isWrite));
+            numGEPOps++;
+        }
+
+        void processDirectRef(llvm::Instruction *inst, const llvm::GlobalVariable *globalVar, bool isWrite) {
+            // Check for Struct Type
+            auto *structTy = llvm::dyn_cast<llvm::StructType>(globalVar->getValueType());
+            if (!structTy) return;
+            // Add Direct Reference
+            gepRefs.push_back(std::make_shared<DirectStructRef>(inst, structTy, isWrite));
+            numDirectRefs++;
         }
 
     public:
@@ -85,13 +91,13 @@ namespace Zippy {
                     continue;
                 }
                 FunctionInfo functionInfo(function);
-                const auto &gepRefs = functionInfo.getGepRefs();
-                if (gepRefs.empty()) {
+                if (functionInfo.getGepRefs().empty()) {
                     llvm::errs() << " - No struct references, skipped\n";
                     continue;
                 }
                 functionInfos.push_back(functionInfo);
-                llvm::errs() << llvm::format(" - Found [%d] GEPs\n", gepRefs.size());
+                llvm::errs() << llvm::format(" - Found Refs: I:[%d] O:[%d] D:[%d]\n", functionInfo.numGEPInst,
+                                             functionInfo.numGEPOps, functionInfo.numDirectRefs);
             }
             if (functionInfos.empty()) {
                 llvm::errs() << "No Functions collected\n";

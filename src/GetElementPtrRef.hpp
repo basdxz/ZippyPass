@@ -4,83 +4,143 @@
 
 namespace Zippy {
     struct GetElementPtrRef {
-        llvm::Value *ptr;
         bool isWrite;
 
         virtual ~GetElementPtrRef() = default;
 
         virtual llvm::ConstantInt *getOperand(unsigned operandIndex) const = 0;
-        virtual void setOperand(unsigned operandIndex, llvm::ConstantInt *operand) const = 0;
+        virtual void setOperand(unsigned operandIndex, llvm::ConstantInt *operand) = 0;
         virtual llvm::Type *getSourceType() const = 0;
-        virtual bool isOperator() const = 0;
+
+        virtual bool isOperator() const {
+            return false;
+        }
+
+        virtual bool isInstruction() const {
+            return false;
+        }
 
         bool isSameSourceStructType(StructType const &structType) const {
             return structType.ptr == getSourceType();
         }
 
     protected:
-        GetElementPtrRef(llvm::Value *ptr, const bool isWrite): ptr(ptr), isWrite(isWrite) {}
-
-        static llvm::ConstantInt *asConstInt(llvm::Value *value) {
-            return llvm::cast<llvm::ConstantInt>(value);
-        }
+        GetElementPtrRef(const bool isWrite): isWrite(isWrite) {}
     };
 
     /**
-      * Contains GEP Instructions
-      */
+     * Contains GEP Instructions
+     */
     struct GetElementPtrInstRef final : GetElementPtrRef {
-        GetElementPtrInstRef(llvm::GetElementPtrInst *ptr, const bool isWrite)
-            : GetElementPtrRef(ptr, isWrite) {}
+        llvm::GetElementPtrInst *ptr;
 
-        bool isOperator() const override {
-            return true;
-        }
+        GetElementPtrInstRef(llvm::GetElementPtrInst *ptr, const bool isWrite)
+            : GetElementPtrRef(isWrite), ptr(ptr) {}
 
         llvm::ConstantInt *getOperand(const unsigned operandIndex) const override {
-            return asConstInt(realPtr()->getOperand(operandIndex));
+            return llvm::cast<llvm::ConstantInt>(ptr->getOperand(operandIndex));
         }
 
-        void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) const override {
-            realPtr()->setOperand(operandIndex, operand);
+        void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) override {
+            ptr->setOperand(operandIndex, operand);
         }
 
         llvm::Type *getSourceType() const override {
-            return realPtr()->getSourceElementType();
-        }
-
-    private:
-        llvm::GetElementPtrInst *realPtr() const {
-            return llvm::cast<llvm::GetElementPtrInst>(ptr);
+            return ptr->getSourceElementType();
         }
     };
 
     /**
-  * Contains GEP Operators, which occur in nested instructions
-  */
+     * Contains GEP Operators, which occur in nested instructions
+     */
     struct GetElementPtrOpRef final : GetElementPtrRef {
+        llvm::GEPOperator *ptr;
+
         GetElementPtrOpRef(llvm::GEPOperator *ptr, const bool isWrite)
-            : GetElementPtrRef(ptr, isWrite) {}
+            : GetElementPtrRef(isWrite), ptr(ptr) {}
 
         bool isOperator() const override {
             return true;
         }
 
         llvm::ConstantInt *getOperand(const unsigned operandIndex) const override {
-            return llvm::cast<llvm::ConstantInt>(realPtr()->getOperand(operandIndex));
+            return llvm::cast<llvm::ConstantInt>(ptr->getOperand(operandIndex));
         }
 
-        void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) const override {
-            realPtr()->setOperand(operandIndex, operand);
+        void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) override {
+            ptr->setOperand(operandIndex, operand);
         }
 
         llvm::Type *getSourceType() const override {
-            return realPtr()->getSourceElementType();
+            return ptr->getSourceElementType();
+        }
+    };
+
+    /**
+     * Handles direct struct access (field 0) without GEP instructions
+     */
+    struct DirectStructRef final : GetElementPtrRef {
+        llvm::Instruction *ptr;
+        llvm::StructType *structType;
+        llvm::ConstantInt *operand; // TODO: Technically, this never updates correctly.
+
+        DirectStructRef(llvm::Instruction *ptr, llvm::StructType *structType, const bool isWrite)
+            : GetElementPtrRef(isWrite), ptr(ptr), structType(structType) {
+            // TODO: This *may* not provide the correct TYPE of integer, but we only use it to read the value back
+            operand = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ptr->getContext()), 0);
+        }
+
+        bool isInstruction() const override {
+            return true;
+        }
+
+        llvm::ConstantInt *getOperand(const unsigned operandIndex) const override {
+            assert(operandIndex == 2); // Magic constant woooo!
+            return operand;
+        }
+
+        void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) override {
+            assert(operandIndex == 2); // Magic constant woooo!
+            const unsigned fieldIndex = operand->getZExtValue();
+            // Avoid changing the IR if no change is needed
+            if (fieldIndex == this->operand->getZExtValue()) return;
+
+            // Create a new GEP Instruction
+            llvm::IRBuilder irBuilder(ptr);
+            const auto gepInst = irBuilder.CreateStructGEP(structType, getPointerOperand(), fieldIndex);
+
+            // Apply the new GEP Instruction
+            setGEPInstOperand(gepInst);
+
+            // Update the operand
+            this->operand = operand;
+        }
+
+        llvm::Type *getSourceType() const override {
+            return structType;
         }
 
     private:
-        llvm::GEPOperator *realPtr() const {
-            return llvm::cast<llvm::GEPOperator>(ptr);
+        llvm::Value *getPointerOperand() const {
+            if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(ptr)) {
+                return loadInst->getPointerOperand();
+            }
+            if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(ptr)) {
+                return storeInst->getPointerOperand();
+            }
+            llvm_unreachable("Expected LoadInst or StoreInst");
+        }
+
+        void setGEPInstOperand(llvm::Value *gepInst) const {
+            if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(ptr)) {
+                loadInst->setOperand(loadInst->getPointerOperandIndex(), gepInst);
+                return;
+            }
+            if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(ptr)) {
+                storeInst->setOperand(storeInst->getPointerOperandIndex(), gepInst);
+                return;
+            }
+            llvm_unreachable("Expected LoadInst or StoreInst");
         }
     };
 }
