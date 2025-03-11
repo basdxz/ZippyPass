@@ -52,7 +52,7 @@ namespace Zippy {
         void collectGlobalVars() {
             auto globalVarInfos = GlobalVarInfo::collect(M);
             if (globalVarInfos.empty()) return;
-            auto varsCollected = 0;
+            unsigned varsCollected = 0;
             llvm::errs() << "Collecting Global Variables into Structs\n";
             for (auto &structInfo: structInfos) {
                 varsCollected += structInfo.collectGlobalVars(globalVarInfos);
@@ -119,7 +119,7 @@ llvmGetPassPluginInfo() {
         .PluginVersion = "v0.1",
         .RegisterPassBuilderCallbacks = [](PassBuilder &PB) {
             PB.registerPipelineParsingCallback(
-                [](StringRef Name, ModulePassManager &MPM,
+                [](const StringRef Name, ModulePassManager &MPM,
                    ArrayRef<PassBuilder::PipelineElement>) {
                     // Allows this plugin to run when using opt with the pass named 'zippy'
                     //
