@@ -4,17 +4,18 @@
 #include "GetElementPtrRef.hpp"
 
 namespace Zippy {
-    struct FieldUse {
+    class FieldUse {
         std::shared_ptr<GetElementPtrRef> gepRef;
         // Operator index is separate from the field index, as GEPs may reference a nested field (not implemented atm)
         unsigned operandIndex;
 
+    public:
         FieldUse(const std::shared_ptr<GetElementPtrRef> &gepRef,
                  const unsigned operandIndex): gepRef(gepRef),
                                                operandIndex(operandIndex) {}
 
         bool isWrite() {
-            return gepRef->isWrite;
+            return gepRef->isWrite();
         }
 
         uint64_t getFieldIndex() const {

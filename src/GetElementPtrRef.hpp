@@ -3,14 +3,20 @@
 #include "ZippyCommon.hpp"
 
 namespace Zippy {
-    struct GetElementPtrRef {
-        bool isWrite;
+    class GetElementPtrRef {
+    protected:
+        bool isWriteFlag;
 
+    public:
         virtual ~GetElementPtrRef() = default;
 
         virtual llvm::ConstantInt *getOperand(unsigned operandIndex) const = 0;
         virtual void setOperand(unsigned operandIndex, llvm::ConstantInt *operand) = 0;
         virtual llvm::Type *getSourceType() const = 0;
+
+        virtual bool isWrite() const {
+            return isWriteFlag;
+        }
 
         virtual bool isOperator() const {
             return false;
@@ -25,15 +31,16 @@ namespace Zippy {
         }
 
     protected:
-        GetElementPtrRef(const bool isWrite): isWrite(isWrite) {}
+        explicit GetElementPtrRef(const bool isWrite): isWriteFlag(isWrite) {}
     };
 
     /**
      * Contains GEP Instructions
      */
-    struct GetElementPtrInstRef final : GetElementPtrRef {
+    class GetElementPtrInstRef final : public GetElementPtrRef {
         llvm::GetElementPtrInst *ptr;
 
+    public:
         GetElementPtrInstRef(llvm::GetElementPtrInst *ptr, const bool isWrite)
             : GetElementPtrRef(isWrite), ptr(ptr) {}
 
@@ -53,9 +60,10 @@ namespace Zippy {
     /**
      * Contains GEP Operators, which occur in nested instructions
      */
-    struct GetElementPtrOpRef final : GetElementPtrRef {
+    class GetElementPtrOpRef final : public GetElementPtrRef {
         llvm::GEPOperator *ptr;
 
+    public:
         GetElementPtrOpRef(llvm::GEPOperator *ptr, const bool isWrite)
             : GetElementPtrRef(isWrite), ptr(ptr) {}
 
@@ -79,11 +87,11 @@ namespace Zippy {
     /**
      * Handles direct struct access (field 0) without GEP instructions
      */
-    struct DirectStructRef final : GetElementPtrRef {
+    class DirectStructRef final : public GetElementPtrRef {
         llvm::Instruction *ptr;
         llvm::StructType *structType;
         llvm::ConstantInt *operand; // TODO: Technically, this never updates correctly.
-
+    public:
         DirectStructRef(llvm::Instruction *ptr, llvm::StructType *structType, const bool isWrite)
             : GetElementPtrRef(isWrite), ptr(ptr), structType(structType) {
             // TODO: This *may* not provide the correct TYPE of integer, but we only use it to read the value back
