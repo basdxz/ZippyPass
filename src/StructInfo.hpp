@@ -76,7 +76,7 @@ namespace Zippy {
 
                 // Get the field index and add the usage
                 const auto fieldIndex = fieldIndexOperand->getZExtValue();
-                fieldInfos[fieldIndex].addUse(gepRef, FIELD_IDX);
+                fieldInfos[fieldIndex].addUse(functionInfo.getLoopInfo(), gepRef, FIELD_IDX);
 
                 // Track uses
                 foundUses++;
@@ -84,6 +84,15 @@ namespace Zippy {
             sumFieldUses += foundUses;
             functionInfo.incrementUsedGepRefs(foundUses);
             return foundUses;
+        }
+
+        /**
+         * This function inverts control flow, so that the actual sorting logic is top-level.
+         */
+        void computeFieldWeights(const std::function<void(FieldInfo &)> &func) {
+            for (auto &fieldInfo: fieldInfos) {
+                func(fieldInfo);
+            }
         }
 
         unsigned collectGlobalVars(std::vector<GlobalVarInfo> &allGlobalVarInfos) {

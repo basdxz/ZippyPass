@@ -1,18 +1,19 @@
 #pragma once
 
 #include "ZippyCommon.hpp"
+#include "cmath"
 #include "GetElementPtrRef.hpp"
 
 namespace Zippy {
     class FieldUse {
+        std::shared_ptr<llvm::LoopInfo> loopInfo;
         std::shared_ptr<GetElementPtrRef> gepRef;
         // Operator index is separate from the field index, as GEPs may reference a nested field (not implemented atm)
         unsigned operandIndex;
 
     public:
-        FieldUse(const std::shared_ptr<GetElementPtrRef> &gepRef,
-                 const unsigned operandIndex): gepRef(gepRef),
-                                               operandIndex(operandIndex) {}
+        FieldUse(const std::shared_ptr<llvm::LoopInfo> &loopInfo, const std::shared_ptr<GetElementPtrRef> &gepRef,
+                 const unsigned operandIndex): loopInfo(loopInfo), gepRef(gepRef), operandIndex(operandIndex) {}
 
         bool isWrite() {
             return gepRef->isWrite();
@@ -33,6 +34,21 @@ namespace Zippy {
             const auto operandType = oldOperand->getIntegerType();
             gepRef->setOperand(operandIndex, llvm::ConstantInt::get(operandType, index));
         }
+
+        // New method to access the GEP reference
+        std::shared_ptr<GetElementPtrRef> getGepRef() const {
+            return gepRef;
+        }
+
+        unsigned computeLoopDepth() const {
+            // The parent should always be present, but rather throw a clear error than segfault
+            const auto parent = gepRef->getInst()->getParent();
+            if (!parent)
+                llvm_unreachable("FieldUse parent cannot be null");
+            // Find a loop if exists, and get its depth. Otherwise, assume not in a loop.
+            const auto loop = loopInfo->getLoopFor(parent);
+            return loop ? loop->getLoopDepth() : 0;
+        }
     };
 
     class FieldInfo {
@@ -46,10 +62,18 @@ namespace Zippy {
         unsigned currentIndex;
         unsigned targetIndex;
 
+        float loopAccessWeight;
+        float totalWeight;
+
     public:
-        explicit FieldInfo(const Type type, const unsigned index): type(type), numLoads(0), numStores(0),
-                                                                   originalIndex(index), currentIndex(index),
-                                                                   targetIndex(index) {}
+        explicit FieldInfo(const Type type, const unsigned index): type(type),
+                                                                   numLoads(0),
+                                                                   numStores(0),
+                                                                   originalIndex(index),
+                                                                   currentIndex(index),
+                                                                   targetIndex(index),
+                                                                   loopAccessWeight(1.0F),
+                                                                   totalWeight(0.0F) {}
 
         const Type &getType() const {
             return type;
@@ -60,7 +84,7 @@ namespace Zippy {
         }
 
         unsigned getNumStores() const {
-            return numLoads;
+            return numStores;
         }
 
         unsigned getSumLoadStores() const {
@@ -84,8 +108,9 @@ namespace Zippy {
             targetIndex = idx;
         }
 
-        void addUse(std::shared_ptr<GetElementPtrRef> gepRef, const unsigned operandIndex) {
-            uses.emplace_back(gepRef, operandIndex);
+        void addUse(std::shared_ptr<llvm::LoopInfo> loopInfo, std::shared_ptr<GetElementPtrRef> gepRef,
+                    const unsigned operandIndex) {
+            uses.emplace_back(loopInfo, gepRef, operandIndex);
             switch (gepRef->getType()) {
                 case GetElementPtrRef::LOAD:
                     ++numLoads;
@@ -100,6 +125,22 @@ namespace Zippy {
 
         const std::vector<FieldUse> &getUses() const {
             return uses;
+        }
+
+        void setLoopAccessWeight(const float weight) {
+            loopAccessWeight = weight;
+        }
+
+        float getLoopAccessWeight() const {
+            return loopAccessWeight;
+        }
+
+        void setTotalWeight(const float weight) {
+            totalWeight = weight;
+        }
+
+        float getTotalWeight() const {
+            return totalWeight;
         }
 
         bool applyRemap() {

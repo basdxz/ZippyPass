@@ -12,6 +12,8 @@ namespace Zippy {
         // Shared pointers are used as GetElementPtrRef has children structs
         std::vector<std::shared_ptr<GetElementPtrRef>> gepRefs;
 
+        std::shared_ptr<llvm::LoopInfo> loopInfo;
+
         // Tracking for found refs
         unsigned numGEPInst;
         unsigned numGEPOps;
@@ -35,6 +37,25 @@ namespace Zippy {
                 } else if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
                     processGEPInst(gepInst, GetElementPtrRef::UNKNOWN);
                 }
+            }
+            if (gepRefs.empty()) return;
+
+            const auto domTree = std::make_unique<llvm::DominatorTree>(*function.ptr);
+            // LoopInfo Takes ownership of the dominator tree here
+            loopInfo = std::make_shared<llvm::LoopInfo>(*domTree);
+
+            // Print debug info about loops found
+            unsigned loopCount = 0;
+            for (const auto &loopRef: *loopInfo) {
+                loopCount += 1 + loopRef->getSubLoops().size();
+            }
+
+            //TODO: Fix lazy print formatting...
+            if (loopCount > 0) {
+                llvm::errs() << TAB_STR << "Function " << function.ptr->getName()
+                        << ": found " << loopCount << " loops\n";
+            } else {
+                llvm::errs() << TAB_STR << "No Loops found\n";
             }
         }
 
@@ -126,6 +147,10 @@ namespace Zippy {
 
         const std::vector<std::shared_ptr<GetElementPtrRef>> &getGepRefs() const {
             return gepRefs;
+        }
+
+        std::shared_ptr<llvm::LoopInfo> getLoopInfo() const {
+           return loopInfo;
         }
     };
 }
