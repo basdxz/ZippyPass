@@ -46,7 +46,7 @@ namespace Zippy {
                 processGEPInst(gepInst, type);
             } else if (auto *gepOp = llvm::dyn_cast<llvm::GEPOperator>(ptrOperand)) {
                 // As a GEP Operator
-                processGEPOperator(gepOp, type);
+                processGEPOperator(inst, gepOp, type);
             } else if (const auto *globalVar = llvm::dyn_cast<llvm::GlobalVariable>(ptrOperand)) {
                 // As a Direct Reference (only handling global variables for now)
                 processDirectRef(inst, globalVar, type);
@@ -63,13 +63,14 @@ namespace Zippy {
             numGEPInst++;
         }
 
-        void processGEPOperator(llvm::GEPOperator *gepOp, const GetElementPtrRef::RefType type) {
+        void processGEPOperator(llvm::Instruction *inst, llvm::GEPOperator *gepOp,
+                                const GetElementPtrRef::RefType type) {
             // Skip if fewer than three operands (array indexing only)
             if (gepOp->getNumOperands() < 3) return;
             // Our source element needs to be a struct type
             if (!llvm::isa<llvm::StructType>(gepOp->getSourceElementType())) return;
             // Add it to the collection
-            gepRefs.push_back(std::make_shared<GetElementPtrOpRef>(gepOp, type));
+            gepRefs.push_back(std::make_shared<GetElementPtrOpRef>(inst, gepOp, type));
             numGEPOps++;
         }
 

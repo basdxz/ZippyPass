@@ -20,8 +20,9 @@ namespace Zippy {
         virtual llvm::ConstantInt *getOperand(unsigned operandIndex) const = 0;
         virtual void setOperand(unsigned operandIndex, llvm::ConstantInt *operand) = 0;
         virtual llvm::Type *getSourceType() const = 0;
+        virtual llvm::Instruction *getInst() const = 0;
 
-        virtual RefType getType() const{
+        virtual RefType getType() const {
             return type;
         }
 
@@ -70,17 +71,22 @@ namespace Zippy {
         llvm::Type *getSourceType() const override {
             return ptr->getSourceElementType();
         }
+
+        llvm::Instruction *getInst() const override {
+            return ptr;
+        }
     };
 
     /**
      * Contains GEP Operators, which occur in nested instructions
      */
     class GetElementPtrOpRef final : public GetElementPtrRef {
+        llvm::Instruction *instPtr;
         llvm::GEPOperator *ptr;
 
     public:
-        GetElementPtrOpRef(llvm::GEPOperator *ptr, const RefType type)
-            : GetElementPtrRef(type), ptr(ptr) {}
+        GetElementPtrOpRef(llvm::Instruction *instPtr, llvm::GEPOperator *ptr, const RefType type)
+            : GetElementPtrRef(type), instPtr(instPtr), ptr(ptr) {}
 
         bool isOperator() const override {
             return true;
@@ -96,6 +102,10 @@ namespace Zippy {
 
         llvm::Type *getSourceType() const override {
             return ptr->getSourceElementType();
+        }
+
+        llvm::Instruction *getInst() const override {
+            return instPtr;
         }
     };
 
@@ -141,6 +151,10 @@ namespace Zippy {
 
         llvm::Type *getSourceType() const override {
             return structType;
+        }
+
+        llvm::Instruction *getInst() const override {
+            return ptr;
         }
 
     private:
