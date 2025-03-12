@@ -47,6 +47,7 @@ endif()
 execute_process(
         COMMAND ${CLANG_EXE}
         -Qunused-arguments # Here to silence NixOS Noise
+        -O3
         ${TEST_DIR}/input.ll
         -o ${TEST_DIR}/input
         RESULT_VARIABLE PROC_RESULT
@@ -63,6 +64,7 @@ endif()
 execute_process(
         COMMAND ${CLANG_EXE}
         -Qunused-arguments # Here to silence NixOS Noise
+        -O3
         ${TEST_DIR}/output.ll
         -o ${TEST_DIR}/output
         RESULT_VARIABLE PROC_RESULT
