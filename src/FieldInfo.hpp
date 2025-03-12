@@ -39,16 +39,32 @@ namespace Zippy {
         Type type;
         std::vector<FieldUse> uses;
 
+        unsigned numLoads;
+        unsigned numStores;
+
         unsigned originalIndex;
         unsigned currentIndex;
         unsigned targetIndex;
 
     public:
-        explicit FieldInfo(const Type type, const unsigned index): type(type), originalIndex(index),
-                                                                   currentIndex(index), targetIndex(index) {}
+        explicit FieldInfo(const Type type, const unsigned index): type(type), numLoads(0), numStores(0),
+                                                                   originalIndex(index), currentIndex(index),
+                                                                   targetIndex(index) {}
 
         const Type &getType() const {
             return type;
+        }
+
+        unsigned getNumLoads() const {
+            return numLoads;
+        }
+
+        unsigned getNumStores() const {
+            return numLoads;
+        }
+
+        unsigned getSumLoadStores() const {
+            return numLoads + numStores;
         }
 
         // Original index as found in the source code
@@ -70,10 +86,16 @@ namespace Zippy {
 
         void addUse(std::shared_ptr<GetElementPtrRef> gepRef, const unsigned operandIndex) {
             uses.emplace_back(gepRef, operandIndex);
-        }
-
-        unsigned getNumUses() const {
-            return uses.size();
+            switch (gepRef->getType()) {
+                case GetElementPtrRef::LOAD:
+                    ++numLoads;
+                    break;
+                case GetElementPtrRef::STORE:
+                    ++numStores;
+                    break;
+                default:
+                    break;
+            }
         }
 
         const std::vector<FieldUse> &getUses() const {

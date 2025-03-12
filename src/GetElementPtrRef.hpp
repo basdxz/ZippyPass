@@ -4,8 +4,15 @@
 
 namespace Zippy {
     class GetElementPtrRef {
+    public:
+        enum RefType {
+            UNKNOWN,
+            LOAD,
+            STORE
+        };
+
     protected:
-        bool isWriteFlag;
+        RefType type;
 
     public:
         virtual ~GetElementPtrRef() = default;
@@ -14,8 +21,16 @@ namespace Zippy {
         virtual void setOperand(unsigned operandIndex, llvm::ConstantInt *operand) = 0;
         virtual llvm::Type *getSourceType() const = 0;
 
+        virtual RefType getType() const{
+            return type;
+        }
+
         virtual bool isWrite() const {
-            return isWriteFlag;
+            return type == STORE;
+        }
+
+        virtual bool isRead() const {
+            return type == LOAD;
         }
 
         virtual bool isOperator() const {
@@ -31,7 +46,7 @@ namespace Zippy {
         }
 
     protected:
-        explicit GetElementPtrRef(const bool isWrite): isWriteFlag(isWrite) {}
+        explicit GetElementPtrRef(const RefType type): type(type) {}
     };
 
     /**
@@ -41,8 +56,8 @@ namespace Zippy {
         llvm::GetElementPtrInst *ptr;
 
     public:
-        GetElementPtrInstRef(llvm::GetElementPtrInst *ptr, const bool isWrite)
-            : GetElementPtrRef(isWrite), ptr(ptr) {}
+        GetElementPtrInstRef(llvm::GetElementPtrInst *ptr, const RefType type)
+            : GetElementPtrRef(type), ptr(ptr) {}
 
         llvm::ConstantInt *getOperand(const unsigned operandIndex) const override {
             return llvm::cast<llvm::ConstantInt>(ptr->getOperand(operandIndex));
@@ -64,8 +79,8 @@ namespace Zippy {
         llvm::GEPOperator *ptr;
 
     public:
-        GetElementPtrOpRef(llvm::GEPOperator *ptr, const bool isWrite)
-            : GetElementPtrRef(isWrite), ptr(ptr) {}
+        GetElementPtrOpRef(llvm::GEPOperator *ptr, const RefType type)
+            : GetElementPtrRef(type), ptr(ptr) {}
 
         bool isOperator() const override {
             return true;
@@ -92,8 +107,8 @@ namespace Zippy {
         llvm::StructType *structType;
         llvm::ConstantInt *operand; // TODO: Technically, this never updates correctly.
     public:
-        DirectStructRef(llvm::Instruction *ptr, llvm::StructType *structType, const bool isWrite)
-            : GetElementPtrRef(isWrite), ptr(ptr), structType(structType) {
+        DirectStructRef(llvm::Instruction *ptr, llvm::StructType *structType, const RefType type)
+            : GetElementPtrRef(type), ptr(ptr), structType(structType) {
             // TODO: This *may* not provide the correct TYPE of integer, but we only use it to read the value back
             operand = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ptr->getContext()), 0);
         }

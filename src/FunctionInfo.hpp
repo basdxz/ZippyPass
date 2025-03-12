@@ -29,53 +29,57 @@ namespace Zippy {
 
                 // Only handle Load and Store Instructions
                 if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(inst)) {
-                    processLoadOrStore(inst, loadInst->getPointerOperand(), false);
+                    processLoadOrStore(inst, loadInst->getPointerOperand(), GetElementPtrRef::LOAD);
                 } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(inst)) {
-                    processLoadOrStore(inst, storeInst->getPointerOperand(), true);
+                    processLoadOrStore(inst, storeInst->getPointerOperand(), GetElementPtrRef::STORE);
+                } else if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
+                    processGEPInst(gepInst, GetElementPtrRef::UNKNOWN);
                 }
             }
         }
 
-        void processLoadOrStore(llvm::Instruction *inst, llvm::Value *ptrOperand, const bool isWrite) {
+        void processLoadOrStore(llvm::Instruction *inst, llvm::Value *ptrOperand,
+                                const GetElementPtrRef::RefType type) {
             // Branching based on known ways the actual field reference could be used
             if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(ptrOperand)) {
                 // As a GEP Instruction
-                processGEPInst(gepInst, isWrite);
+                processGEPInst(gepInst, type);
             } else if (auto *gepOp = llvm::dyn_cast<llvm::GEPOperator>(ptrOperand)) {
                 // As a GEP Operator
-                processGEPOperator(gepOp, isWrite);
+                processGEPOperator(gepOp, type);
             } else if (const auto *globalVar = llvm::dyn_cast<llvm::GlobalVariable>(ptrOperand)) {
                 // As a Direct Reference (only handling global variables for now)
-                processDirectRef(inst, globalVar, isWrite);
+                processDirectRef(inst, globalVar, type);
             }
         }
 
-        void processGEPInst(llvm::GetElementPtrInst *gepInst, bool isWrite) {
+        void processGEPInst(llvm::GetElementPtrInst *gepInst, const GetElementPtrRef::RefType type) {
             // Skip if fewer than three operands (array indexing only)
             if (gepInst->getNumOperands() < 3) return;
             // Our source element needs to be a struct type
             if (!llvm::isa<llvm::StructType>(gepInst->getSourceElementType())) return;
             // Add it to the collection
-            gepRefs.push_back(std::make_shared<GetElementPtrInstRef>(gepInst, isWrite));
+            gepRefs.push_back(std::make_shared<GetElementPtrInstRef>(gepInst, type));
             numGEPInst++;
         }
 
-        void processGEPOperator(llvm::GEPOperator *gepOp, bool isWrite) {
+        void processGEPOperator(llvm::GEPOperator *gepOp, const GetElementPtrRef::RefType type) {
             // Skip if fewer than three operands (array indexing only)
             if (gepOp->getNumOperands() < 3) return;
             // Our source element needs to be a struct type
             if (!llvm::isa<llvm::StructType>(gepOp->getSourceElementType())) return;
             // Add it to the collection
-            gepRefs.push_back(std::make_shared<GetElementPtrOpRef>(gepOp, isWrite));
+            gepRefs.push_back(std::make_shared<GetElementPtrOpRef>(gepOp, type));
             numGEPOps++;
         }
 
-        void processDirectRef(llvm::Instruction *inst, const llvm::GlobalVariable *globalVar, bool isWrite) {
+        void processDirectRef(llvm::Instruction *inst, const llvm::GlobalVariable *globalVar,
+                              const GetElementPtrRef::RefType type) {
             // Check for Struct Type
             auto *structTy = llvm::dyn_cast<llvm::StructType>(globalVar->getValueType());
             if (!structTy) return;
             // Add Direct Reference
-            gepRefs.push_back(std::make_shared<DirectStructRef>(inst, structTy, isWrite));
+            gepRefs.push_back(std::make_shared<DirectStructRef>(inst, structTy, type));
             numDirectRefs++;
         }
 
