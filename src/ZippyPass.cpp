@@ -152,7 +152,7 @@ namespace Zippy {
 
                 llvm::errs() << TAB_STR << "Original order as-found:\n";
                 for (auto &fieldInfo: structInfo.getFieldInfos()) {
-                    llvm::errs() << llvm::format("Field %d: loads=%d, stores=%d, loop_weight=%d, total_weight=%d",
+                    llvm::errs() << llvm::format("Field %d: loads=%d, stores=%d, loop_weight=%f, total_weight=%f ",
                                                  fieldInfo.getOriginalIndex(), fieldInfo.getNumLoads(),
                                                  fieldInfo.getNumStores(), fieldInfo.getLoopAccessWeight(),
                                                  fieldInfo.getTotalWeight());
