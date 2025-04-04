@@ -15,7 +15,7 @@ execute_process(
         COMMAND ${CLANG_EXE} -S -emit-llvm -O0
         -x c ${TEST_DIR}/input.c
         -o ${TEST_DIR}/input.ll
-        -fno-discard-value-names -g
+        -fno-discard-value-names
         RESULT_VARIABLE PROC_RESULT
 )
 
