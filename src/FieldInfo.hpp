@@ -35,6 +35,10 @@ namespace Zippy {
             gepRef->setOperand(operandIndex, llvm::ConstantInt::get(operandType, index));
         }
 
+        void setAlignment(const llvm::Align alignment) {
+            gepRef->setAlignment(alignment);
+        }
+
         // New method to access the GEP reference
         std::shared_ptr<GetElementPtrRef> getGepRef() const {
             return gepRef;
@@ -53,6 +57,7 @@ namespace Zippy {
 
     class FieldInfo {
         Type type;
+        llvm::Align alignment;
         std::vector<FieldUse> uses;
 
         unsigned numLoads;
@@ -66,14 +71,15 @@ namespace Zippy {
         float totalWeight;
 
     public:
-        explicit FieldInfo(const Type type, const unsigned index): type(type),
-                                                                   numLoads(0),
-                                                                   numStores(0),
-                                                                   originalIndex(index),
-                                                                   currentIndex(index),
-                                                                   targetIndex(index),
-                                                                   loopAccessWeight(1.0F),
-                                                                   totalWeight(0.0F) {}
+        explicit FieldInfo(const Type type, const unsigned index, const llvm::Align alignment): type(type),
+            alignment(alignment),
+            numLoads(0),
+            numStores(0),
+            originalIndex(index),
+            currentIndex(index),
+            targetIndex(index),
+            loopAccessWeight(1.0F),
+            totalWeight(0.0F) {}
 
         const Type &getType() const {
             return type;
@@ -151,8 +157,22 @@ namespace Zippy {
             // Skip work if field has no uses
             if (uses.empty()) return false;
             // Set all new field indices to target index
-            for (auto user: uses)
-                user.setFieldIndex(targetIndex);
+            for (auto use: uses)
+                use.setFieldIndex(targetIndex);
+            return true;
+        }
+
+        bool applyAlign(const llvm::Align newAlignment) {
+            llvm::errs() << "\n align=";
+            llvm::errs() << alignment.value();
+            llvm::errs() << ":";
+            llvm::errs() << newAlignment.value();
+            llvm::errs() << "\n";
+
+            if (alignment == newAlignment) return false;
+            for (auto use: uses)
+                use.setAlignment(newAlignment);
+            alignment = newAlignment;
             return true;
         }
     };

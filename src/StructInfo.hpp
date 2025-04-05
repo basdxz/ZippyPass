@@ -17,13 +17,14 @@ namespace Zippy {
         std::vector<unsigned> remapTable;
         unsigned sumFieldUses;
 
-        explicit StructInfo(const StructType structType): structType(structType), sumFieldUses(0) {
+        explicit StructInfo(const StructType structType, const llvm::DataLayout &DL): structType(structType),
+            sumFieldUses(0) {
             // Collect all the elements from this struct early
             const auto numElements = structType.ptr->getNumElements();
             fieldInfos.reserve(numElements);
 
             for (auto i = 0; i < numElements; i++) {
-                fieldInfos.emplace_back(structType.getElementType(i), i);
+                fieldInfos.emplace_back(structType.getElementType(i), i, calculateFieldAlignment(DL, structType.ptr, i));
             }
 
             // Pre-generate identity remap table
@@ -34,11 +35,11 @@ namespace Zippy {
         }
 
     public:
-        static std::vector<StructInfo> collect(llvm::Module &M) {
+        static std::vector<StructInfo> collect(const llvm::Module &M, const llvm::DataLayout &DL) {
             llvm::errs() << "Collecting Structs\n";
             std::vector<StructInfo> structInfos;
             for (const auto structType: M.getIdentifiedStructTypes()) {
-                auto structInfo = StructInfo(StructType{structType});
+                auto structInfo = StructInfo(StructType{structType}, DL);
                 structInfos.push_back(structInfo);
                 llvm::errs() << TAB_STR << structInfo.getStructType() << "\n";
             }
@@ -156,6 +157,15 @@ namespace Zippy {
                 globalVarInfo.remap(remapTable);
             }
             return true;
+        }
+
+        bool applyAlign(const llvm::DataLayout &DL) {
+            auto didWork = false;
+            const auto numFieldInfos = fieldInfos.size();
+            for (auto i = 0; i < numFieldInfos; i++) {
+                didWork |= fieldInfos[i].applyAlign(calculateFieldAlignment(DL, structType.ptr, i));
+            }
+            return didWork;
         }
     };
 }

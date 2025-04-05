@@ -6,6 +6,8 @@
 #include "GetElementPtrRef.hpp"
 
 namespace Zippy {
+    typedef llvm::SmallPtrSet<llvm::GetElementPtrInst*, 8> GEPInstSet;
+
     class FunctionInfo {
         Function function;
 
@@ -24,6 +26,8 @@ namespace Zippy {
 
         explicit FunctionInfo(const Function function): function(function), numGEPInst(0), numGEPOps(0),
                                                         numDirectRefs(0), numUsedGepRefs(0) {
+            GEPInstSet foundGEPs;
+
             const auto ptr = function.ptr;
             // Scan all instructions in the function, we do it like it's done in the spec
             for (llvm::inst_iterator I = inst_begin(ptr), E = inst_end(ptr); I != E; ++I) {
@@ -31,11 +35,11 @@ namespace Zippy {
 
                 // Only handle Load and Store Instructions
                 if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(inst)) {
-                    processLoadOrStore(inst, loadInst->getPointerOperand(), GetElementPtrRef::LOAD);
+                    processLoadOrStore(foundGEPs, inst, loadInst->getPointerOperand(), GetElementPtrRef::LOAD);
                 } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(inst)) {
-                    processLoadOrStore(inst, storeInst->getPointerOperand(), GetElementPtrRef::STORE);
+                    processLoadOrStore(foundGEPs, inst, storeInst->getPointerOperand(), GetElementPtrRef::STORE);
                 } else if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
-                    processGEPInst(gepInst, GetElementPtrRef::UNKNOWN);
+                    processGEPInst(foundGEPs, gepInst, GetElementPtrRef::UNKNOWN);
                 }
             }
             if (gepRefs.empty()) return;
@@ -59,12 +63,12 @@ namespace Zippy {
             }
         }
 
-        void processLoadOrStore(llvm::Instruction *inst, llvm::Value *ptrOperand,
+        void processLoadOrStore(GEPInstSet& foundGEPs, llvm::Instruction *inst, llvm::Value *ptrOperand,
                                 const GetElementPtrRef::RefType type) {
             // Branching based on known ways the actual field reference could be used
             if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(ptrOperand)) {
                 // As a GEP Instruction
-                processGEPInst(gepInst, type);
+                processGEPInst(foundGEPs, gepInst, type);
             } else if (auto *gepOp = llvm::dyn_cast<llvm::GEPOperator>(ptrOperand)) {
                 // As a GEP Operator
                 processGEPOperator(inst, gepOp, type);
@@ -74,14 +78,34 @@ namespace Zippy {
             }
         }
 
-        void processGEPInst(llvm::GetElementPtrInst *gepInst, const GetElementPtrRef::RefType type) {
+        void processGEPInst(GEPInstSet& foundGEPs, llvm::GetElementPtrInst *gepInst, GetElementPtrRef::RefType type) {
+            // Avoid duplicates
+            if (!foundGEPs.insert(gepInst).second) return;
             // Skip if fewer than three operands (array indexing only)
             if (gepInst->getNumOperands() < 3) return;
+            // This would be true if we used nested anonymous structs, but that is unsupported
+            if (gepInst->getNumOperands() != 3) llvm_unreachable("Expected three or fewer GEP operands");
             // Our source element needs to be a struct type
             if (!llvm::isa<llvm::StructType>(gepInst->getSourceElementType())) return;
+            // Attempt to resolve type if unknown
+            if (type == GetElementPtrRef::UNKNOWN)
+                type = resolveRefType(gepInst);
             // Add it to the collection
             gepRefs.push_back(std::make_shared<GetElementPtrInstRef>(gepInst, type));
             numGEPInst++;
+        }
+
+        static GetElementPtrRef::RefType resolveRefType(llvm::GetElementPtrInst *gepInst) {
+            for (const auto gepUser: gepInst->users()) {
+                if (llvm::isa<llvm::LoadInst>(gepUser)) return GetElementPtrRef::LOAD;
+                if (llvm::isa<llvm::StoreInst>(gepUser)) return GetElementPtrRef::STORE;
+                if (llvm::isa<llvm::CallInst>(gepUser)) return GetElementPtrRef::CALL;
+                if (auto *next = llvm::dyn_cast<llvm::GetElementPtrInst>(gepUser)) {
+                    auto type = resolveRefType(next);
+                    if (type != GetElementPtrRef::UNKNOWN) return type;
+                }
+            }
+            return GetElementPtrRef::UNKNOWN;
         }
 
         void processGEPOperator(llvm::Instruction *inst, llvm::GEPOperator *gepOp,

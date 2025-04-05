@@ -13,13 +13,14 @@ namespace Zippy {
     class Pass {
         llvm::Module &M;
         llvm::ModuleAnalysisManager &AM;
+        const llvm::DataLayout &DL;
 
         // Using lists instead of vectors, because using vectors didn't let me remove elements?
         std::vector<StructInfo> structInfos;
         std::vector<FunctionInfo> functionInfos;
 
         bool collectStructTypes() {
-            structInfos = StructInfo::collect(M);
+            structInfos = StructInfo::collect(M, DL);
             return !structInfos.empty();
         }
 
@@ -132,7 +133,8 @@ namespace Zippy {
 
     public:
         explicit Pass(llvm::Module &M,
-                      llvm::ModuleAnalysisManager &AM): M(M), AM(AM) {}
+                      llvm::ModuleAnalysisManager &AM): M(M), AM(AM), DL(M.getDataLayout()) {
+        }
 
         llvm::PreservedAnalyses run() {
             auto didWork = false;
@@ -161,15 +163,25 @@ namespace Zippy {
                 // Sort using both access count and loop weight
                 std::ranges::sort(structInfo.getFieldInfos(), std::greater(), &FieldInfo::getTotalWeight);
 
+                // TODO: Print debug info
                 structInfo.updateTargetIndices();
-                didWork |= structInfo.applyRemap();
+                if (structInfo.applyRemap()) {
+                    didWork = true;
+                } else {
+                    continue;
+                }
+                if (structInfo.applyAlign(DL)) {
+
+                } else {
+
+                }
             }
 
             if (didWork) {
                 llvm::errs() << "Did work\n";
                 return llvm::PreservedAnalyses::none();
             }
-
+            llvm::errs() << "Did no work\n";
             return llvm::PreservedAnalyses::all();
             // No work skip
         no_work:

@@ -8,7 +8,8 @@ namespace Zippy {
         enum RefType {
             UNKNOWN,
             LOAD,
-            STORE
+            STORE,
+            CALL
         };
 
     protected:
@@ -19,6 +20,7 @@ namespace Zippy {
 
         virtual llvm::ConstantInt *getOperand(unsigned operandIndex) const = 0;
         virtual void setOperand(unsigned operandIndex, llvm::ConstantInt *operand) = 0;
+        virtual void setAlignment(llvm::Align alignment) = 0;
         virtual llvm::Type *getSourceType() const = 0;
         virtual llvm::Instruction *getInst() const = 0;
 
@@ -68,12 +70,34 @@ namespace Zippy {
             ptr->setOperand(operandIndex, operand);
         }
 
+        void setAlignment(const llvm::Align alignment) override {
+            setAlignment(alignment, ptr);
+        }
+
         llvm::Type *getSourceType() const override {
             return ptr->getSourceElementType();
         }
 
         llvm::Instruction *getInst() const override {
             return ptr;
+        }
+
+    private:
+        static void setAlignment(const llvm::Align alignment, llvm::GetElementPtrInst *gepInst) {
+            // We need to find **any** references we can reach and update the alignment
+            for (const auto gepUser: gepInst->users()) {
+                if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(gepUser)) {
+                    loadInst->setAlignment(alignment);
+                    continue;
+                }
+                if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(gepUser)) {
+                    storeInst->setAlignment(alignment);
+                    continue;
+                }
+                if (auto *next = llvm::dyn_cast<llvm::GetElementPtrInst>(gepUser)) {
+                    setAlignment(alignment, next);
+                }
+            }
         }
     };
 
@@ -98,6 +122,14 @@ namespace Zippy {
 
         void setOperand(const unsigned operandIndex, llvm::ConstantInt *operand) override {
             ptr->setOperand(operandIndex, operand);
+        }
+
+        void setAlignment(const llvm::Align alignment) override {
+            if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(instPtr)) {
+                loadInst->setAlignment(alignment);
+            } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(instPtr)) {
+                storeInst->setAlignment(alignment);
+            }
         }
 
         llvm::Type *getSourceType() const override {
@@ -147,6 +179,15 @@ namespace Zippy {
 
             // Update the operand
             this->operand = operand;
+        }
+
+        void setAlignment(const llvm::Align alignment) override {
+            if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(ptr)) {
+                loadInst->setAlignment(alignment);
+            } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(ptr)) {
+                storeInst->setAlignment(alignment);
+            }
+            llvm_unreachable("Expected LoadInst or StoreInst");
         }
 
         llvm::Type *getSourceType() const override {

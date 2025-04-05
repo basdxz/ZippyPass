@@ -61,6 +61,16 @@ namespace Zippy {
             OS << (ptr->hasName() ? ptr->getName() : NO_VAL_NAME_STR);
         }
     };
+
+    llvm::Align calculateFieldAlignment(const llvm::DataLayout &DL,
+                                        llvm::StructType *structType,
+                                        unsigned fieldIndex) {
+        const auto *layout = DL.getStructLayout(structType);
+        auto fieldOffset = layout->getElementOffset(fieldIndex);
+        auto *fieldType = structType->getElementType(fieldIndex);
+        auto typeAlignment = DL.getABITypeAlign(fieldType);
+        return commonAlignment(typeAlignment, fieldOffset);
+    }
 }
 
 
