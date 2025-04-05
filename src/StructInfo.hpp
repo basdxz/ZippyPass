@@ -13,18 +13,23 @@ namespace Zippy {
         StructType structType;
         std::vector<FieldInfo> fieldInfos;
         std::vector<GlobalVarInfo> globalVarInfos;
+        std::vector<std::shared_ptr<IntrinsicInstRef>> intrinsicRefs;
 
         std::vector<unsigned> remapTable;
         unsigned sumFieldUses;
 
+        llvm::TypeSize initialSizeBytes;
+        llvm::TypeSize currentSizeBytes;
+
         explicit StructInfo(const StructType structType, const llvm::DataLayout &DL): structType(structType),
-            sumFieldUses(0) {
+            sumFieldUses(0), initialSizeBytes(llvm::TypeSize::getZero()), currentSizeBytes(llvm::TypeSize::getZero()) {
             // Collect all the elements from this struct early
             const auto numElements = structType.ptr->getNumElements();
             fieldInfos.reserve(numElements);
 
             for (auto i = 0; i < numElements; i++) {
-                fieldInfos.emplace_back(structType.getElementType(i), i, calculateFieldAlignment(DL, structType.ptr, i));
+                fieldInfos.emplace_back(structType.getElementType(i), i,
+                                        calculateFieldAlignment(DL, structType.ptr, i));
             }
 
             // Pre-generate identity remap table
@@ -32,6 +37,9 @@ namespace Zippy {
             for (auto i = 0; i < numElements; ++i) {
                 remapTable.emplace_back(i);
             }
+
+            initialSizeBytes = DL.getTypeAllocSize(structType.ptr);
+            currentSizeBytes = initialSizeBytes;
         }
 
     public:
@@ -84,6 +92,13 @@ namespace Zippy {
             }
             sumFieldUses += foundUses;
             functionInfo.incrementUsedGepRefs(foundUses);
+
+            // TODO: This is a quick fix for finding relevant mem copies, tidy later
+            for (auto intrinsicRef: functionInfo.getIntrinsicInsts()) {
+                if (intrinsicRef->getDstType() == structType.ptr)
+                    intrinsicRefs.push_back(intrinsicRef);
+            }
+
             return foundUses;
         }
 
@@ -166,6 +181,19 @@ namespace Zippy {
                 didWork |= fieldInfos[i].applyAlign(calculateFieldAlignment(DL, structType.ptr, i));
             }
             return didWork;
+        }
+
+        void updateMemCpyRefs(const llvm::DataLayout &DL) {
+            obligatoryMemoryLeak(DL);
+            for (const auto intrinsicRef: intrinsicRefs)
+                intrinsicRef->setTypeSize(currentSizeBytes);
+        }
+
+    private:
+        void obligatoryMemoryLeak(const llvm::DataLayout &DL) {
+            const auto dummyStrucType = llvm::StructType::create(structType.ptr->getContext());
+            dummyStrucType->setBody(structType.ptr->elements(), dummyStrucType->isPacked());
+            currentSizeBytes = DL.getTypeAllocSize(dummyStrucType);
         }
     };
 }

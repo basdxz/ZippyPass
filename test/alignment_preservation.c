@@ -55,7 +55,7 @@ int main() {
     AlignmentStruct data = {'A', 10, 20.0, 'B', 30, 'C', 40.0f};
     
     // Access fields to trigger optimization
-    double result = 0;
+    double result = access_fields(&data);
     
     // Test if alignment is preserved after optimization
     int alignment_result = test_alignment(&data);

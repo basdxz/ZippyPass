@@ -1,11 +1,12 @@
 #pragma once
 
-#include <set>
 
 #include "ZippyCommon.hpp"
 #include "GetElementPtrRef.hpp"
+#include "IntrinsicInstRef.hpp"
 
 namespace Zippy {
+    // Only here to reduce verbosity
     typedef llvm::SmallPtrSet<llvm::GetElementPtrInst*, 8> GEPInstSet;
 
     class FunctionInfo {
@@ -13,6 +14,8 @@ namespace Zippy {
 
         // Shared pointers are used as GetElementPtrRef has children structs
         std::vector<std::shared_ptr<GetElementPtrRef>> gepRefs;
+        // Intrinsic instructions such as memcpy or memset
+        std::vector<std::shared_ptr<IntrinsicInstRef>> intrinsicInsts;
 
         std::shared_ptr<llvm::LoopInfo> loopInfo;
 
@@ -33,13 +36,18 @@ namespace Zippy {
             for (llvm::inst_iterator I = inst_begin(ptr), E = inst_end(ptr); I != E; ++I) {
                 llvm::Instruction *inst = &*I;
 
-                // Only handle Load and Store Instructions
                 if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(inst)) {
                     processLoadOrStore(foundGEPs, inst, loadInst->getPointerOperand(), GetElementPtrRef::LOAD);
                 } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(inst)) {
                     processLoadOrStore(foundGEPs, inst, storeInst->getPointerOperand(), GetElementPtrRef::STORE);
                 } else if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
                     processGEPInst(foundGEPs, gepInst, GetElementPtrRef::UNKNOWN);
+                } else if (auto *memCpyInst = llvm::dyn_cast<llvm::MemCpyInst>(inst)) {
+                    // TODO: We're collecting but not tracking the number, also not checking if they refer to structs
+                    intrinsicInsts.push_back(std::make_shared<MemCpyInstRef>(memCpyInst));
+                } else if (auto *memSetInst = llvm::dyn_cast<llvm::MemSetInst>(inst)) {
+                    // TODO: We're collecting but not tracking the number, also not checking if they refer to structs
+                    intrinsicInsts.push_back(std::make_shared<MemSetInstRef>(memSetInst));
                 }
             }
             if (gepRefs.empty()) return;
@@ -142,12 +150,14 @@ namespace Zippy {
                 }
                 FunctionInfo functionInfo(function);
                 if (functionInfo.getGepRefs().empty()) {
-                    llvm::errs() << " - No struct references, skipped\n";
-                    continue;
+                    if (functionInfo.intrinsicInsts.empty()) {
+                        llvm::errs() << " - No struct references, skipped\n";
+                        continue;
+                    }
                 }
                 functionInfos.push_back(functionInfo);
-                llvm::errs() << llvm::format(" - Found Refs: I:[%d] O:[%d] D:[%d]\n", functionInfo.numGEPInst,
-                                             functionInfo.numGEPOps, functionInfo.numDirectRefs);
+                llvm::errs() << llvm::format(" - Found Refs: I:[%d] O:[%d] D:[%d] C[%d]\n", functionInfo.numGEPInst,
+                                             functionInfo.numGEPOps, functionInfo.numDirectRefs, functionInfo.intrinsicInsts.size());
             }
             if (functionInfos.empty()) {
                 llvm::errs() << "No Functions collected\n";
@@ -171,6 +181,10 @@ namespace Zippy {
 
         const std::vector<std::shared_ptr<GetElementPtrRef>> &getGepRefs() const {
             return gepRefs;
+        }
+
+        const std::vector<std::shared_ptr<IntrinsicInstRef>> &getIntrinsicInsts() const {
+            return intrinsicInsts;
         }
 
         std::shared_ptr<llvm::LoopInfo> getLoopInfo() const {

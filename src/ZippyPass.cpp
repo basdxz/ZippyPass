@@ -121,7 +121,7 @@ namespace Zippy {
                                                      originalIndex, loopAccessCount, deepestLoopFound,
                                                      loopAccessWeight);
                     } else {
-                        llvm::errs() << llvm::format("Field %d not used in loops", originalIndex);
+                        llvm::errs() << llvm::format("Field %d not used in loops. ", originalIndex);
                     }
 
                     // We set the loop depth for future debug prints
@@ -170,11 +170,8 @@ namespace Zippy {
                 } else {
                     continue;
                 }
-                if (structInfo.applyAlign(DL)) {
-
-                } else {
-
-                }
+                structInfo.applyAlign(DL);
+                structInfo.updateMemCpyRefs(M.getDataLayout());
             }
 
             if (didWork) {
