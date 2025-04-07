@@ -172,6 +172,7 @@ namespace Zippy {
 
             // Create a new GEP Instruction
             llvm::IRBuilder irBuilder(ptr);
+            // TODO: Due to some wacky internal "Constant Folding", this will end up getting double remapped
             const auto gepInst = irBuilder.CreateStructGEP(structType, getPointerOperand(), fieldIndex);
 
             // Apply the new GEP Instruction
