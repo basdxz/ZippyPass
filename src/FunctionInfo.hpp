@@ -50,7 +50,7 @@ namespace Zippy {
                     intrinsicInsts.push_back(std::make_shared<MemSetInstRef>(memSetInst));
                 }
             }
-            if (gepRefs.empty()) return;
+            if (gepRefs.empty() && intrinsicInsts.empty()) return;
 
             const auto domTree = std::make_unique<llvm::DominatorTree>(*function.ptr);
             // LoopInfo Takes ownership of the dominator tree here
@@ -62,16 +62,12 @@ namespace Zippy {
                 loopCount += 1 + loopRef->getSubLoops().size();
             }
 
-            //TODO: Fix lazy print formatting...
             if (loopCount > 0) {
-                llvm::errs() << TAB_STR << "Function " << function.ptr->getName()
-                        << ": found " << loopCount << " loops\n";
-            } else {
-                llvm::errs() << TAB_STR << "No Loops found\n";
+                llvm::errs() << "\n" << TAB_STR << TAB_STR << llvm::format("Found: [%d] Loops", loopCount);
             }
         }
 
-        void processLoadOrStore(GEPInstSet& foundGEPs, llvm::Instruction *inst, llvm::Value *ptrOperand,
+        void processLoadOrStore(GEPInstSet &foundGEPs, llvm::Instruction *inst, llvm::Value *ptrOperand,
                                 const GetElementPtrRef::RefType type) {
             // Branching based on known ways the actual field reference could be used
             if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(ptrOperand)) {
@@ -86,13 +82,14 @@ namespace Zippy {
             }
         }
 
-        void processGEPInst(GEPInstSet& foundGEPs, llvm::GetElementPtrInst *gepInst, GetElementPtrRef::RefType type) {
+        void processGEPInst(GEPInstSet &foundGEPs, llvm::GetElementPtrInst *gepInst, GetElementPtrRef::RefType type) {
             // Avoid duplicates
             if (!foundGEPs.insert(gepInst).second) return;
             // Skip if fewer than three operands (array indexing only)
             if (gepInst->getNumOperands() < 3) return;
             // This would be true if we used nested anonymous structs, but that is unsupported
-            if (gepInst->getNumOperands() != 3) llvm_unreachable("Expected three or fewer GEP operands");
+            if (gepInst->getNumOperands() != 3)
+                llvm_unreachable("Expected three or fewer GEP operands");
             // Our source element needs to be a struct type
             if (!llvm::isa<llvm::StructType>(gepInst->getSourceElementType())) return;
             // Attempt to resolve type if unknown
@@ -143,11 +140,9 @@ namespace Zippy {
             std::vector<FunctionInfo> functionInfos;
             for (auto &functionRaw: M.functions()) {
                 Function function{&functionRaw};
+                // Don't mention undefined functions at all
+                if (!function.isDefined()) continue;
                 llvm::errs() << TAB_STR << function;
-                if (!function.isDefined()) {
-                    llvm::errs() << " - Not defined, skipped\n";
-                    continue;
-                }
                 FunctionInfo functionInfo(function);
                 if (functionInfo.getGepRefs().empty()) {
                     if (functionInfo.intrinsicInsts.empty()) {
@@ -156,13 +151,15 @@ namespace Zippy {
                     }
                 }
                 functionInfos.push_back(functionInfo);
-                llvm::errs() << llvm::format(" - Found Refs: I:[%d] O:[%d] D:[%d] C[%d]\n", functionInfo.numGEPInst,
-                                             functionInfo.numGEPOps, functionInfo.numDirectRefs, functionInfo.intrinsicInsts.size());
+                llvm::errs() << "\n" << TAB_STR << llvm::format("Found Refs: I:[%d] O:[%d] D:[%d] C[%d]\n",
+                                                                functionInfo.numGEPInst,
+                                                                functionInfo.numGEPOps, functionInfo.numDirectRefs,
+                                                                functionInfo.intrinsicInsts.size());
             }
             if (functionInfos.empty()) {
-                llvm::errs() << "No Functions collected\n";
+                llvm::errs() << "No Functions collected\n\n";
             } else {
-                llvm::errs() << llvm::format("Collected [%d] Functions\n", functionInfos.size());
+                llvm::errs() << llvm::format("Collected [%d] Functions\n\n", functionInfos.size());
             }
             return std::move(functionInfos);
         }
@@ -188,7 +185,7 @@ namespace Zippy {
         }
 
         std::shared_ptr<llvm::LoopInfo> getLoopInfo() const {
-           return loopInfo;
+            return loopInfo;
         }
     };
 }

@@ -46,15 +46,21 @@ namespace Zippy {
         static std::vector<StructInfo> collect(const llvm::Module &M, const llvm::DataLayout &DL) {
             llvm::errs() << "Collecting Structs\n";
             std::vector<StructInfo> structInfos;
-            for (const auto structType: M.getIdentifiedStructTypes()) {
-                auto structInfo = StructInfo(StructType{structType}, DL);
-                structInfos.push_back(structInfo);
+            for (const auto structTy: M.getIdentifiedStructTypes()) {
+                const StructType structType{structTy};
+                // Skip unnamed structs
+                if (!structType.ptr->hasName()) continue;
+                // TODO: Currently skipping 'timespec' structs, but should have a more robust marking system
+                if (structType.ptr->getName() == "struct.timespec") continue;
+
+                auto structInfo = StructInfo(structType, DL);
                 llvm::errs() << TAB_STR << structInfo.getStructType() << "\n";
+                structInfos.push_back(structInfo);
             }
             if (structInfos.empty()) {
-                llvm::errs() << "No Structs collected\n";
+                llvm::errs() << "No Structs collected\n\n";
             } else {
-                llvm::errs() << llvm::format("Collected [%d] Structs\n", structInfos.size());
+                llvm::errs() << llvm::format("Collected [%d] Structs\n\n", structInfos.size());
             }
             return std::move(structInfos);
         }

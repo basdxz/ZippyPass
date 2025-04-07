@@ -46,7 +46,7 @@ namespace Zippy {
                 llvm::errs() << "No Field Uses collected\n";
                 return false;
             }
-            llvm::errs() << llvm::format("Collected [%d] Field Uses\n", sumUses);
+            llvm::errs() << llvm::format("Collected [%d] Field Uses\n\n", sumUses);
             return true;
         }
 
@@ -71,8 +71,9 @@ namespace Zippy {
         const float innerLoopMult = std::pow(10, 1.3F);
 
         void computeFieldWeights() {
+            llvm::errs() << "Computing Weights\n";
             for (auto &structInfo: structInfos) {
-                llvm::errs() << "Computing Weights For Struct: " << structInfo.getStructType() << "\n";
+                llvm::errs() << TAB_STR << "For Struct: " << structInfo.getStructType() << "\n";
 
                 structInfo.computeFieldWeights([*this](FieldInfo &fieldInfo) {
                     const auto originalIndex = fieldInfo.getOriginalIndex();
@@ -118,7 +119,7 @@ namespace Zippy {
                     }
 
                     // Print debug counters
-                    llvm::errs() << TAB_STR;
+                    llvm::errs() << TAB_STR << TAB_STR;
                     if (loopAccessCount > 0) {
                         llvm::errs() << llvm::format("Field %d accesses in loops: %d, deepest loop: %d, weight: %d\n",
                                                      originalIndex, loopAccessCount, deepestLoopFound,
@@ -132,6 +133,7 @@ namespace Zippy {
                     fieldInfo.setTotalWeight(static_cast<float>(fieldInfo.getSumLoadStores()) * loopAccessWeight);
                 });
             }
+            llvm::errs() << "\n";
         }
 
     public:

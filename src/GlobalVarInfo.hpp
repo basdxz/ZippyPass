@@ -13,24 +13,21 @@ namespace Zippy {
             llvm::errs() << "Collecting Global Variables\n";
             std::vector<GlobalVarInfo> globalVarInfos;
             for (auto &globalVarRaw: M.globals()) {
-                llvm::errs() << TAB_STR;
                 const GlobalVariable globalVar = {&globalVarRaw};
-                llvm::errs() << globalVar;
+                // Don't mention non-struct globals at all
+                if (!globalVar.isStructType()) continue;
+                llvm::errs() << TAB_STR << globalVar;
                 if (globalVar.isZeroInit()) {
                     llvm::errs() << " - Zero init, skipped\n";
-                    continue;
-                }
-                if (!globalVar.isStructType()) {
-                    llvm::errs() << " - Not a struct, skipped\n";
                     continue;
                 }
                 globalVarInfos.push_back(GlobalVarInfo(globalVar));
                 llvm::errs() << "\n";
             }
             if (globalVarInfos.empty()) {
-                llvm::errs() << "No Global Variables collected\n";
+                llvm::errs() << "No Global Variables collected\n\n";
             } else {
-                llvm::errs() << llvm::format("Collected [%d] Global Variables\n", globalVarInfos.size());
+                llvm::errs() << llvm::format("Collected [%d] Global Variables\n\n", globalVarInfos.size());
             }
             return std::move(globalVarInfos);
         }
