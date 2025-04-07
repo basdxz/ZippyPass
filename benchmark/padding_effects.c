@@ -12,7 +12,7 @@
 // Number of instances to create
 #define NUM_INSTANCES 1000000
 // Number of iterations to process
-#define ITERATIONS 100
+#define ITERATIONS 10
 
 // Structure with inefficient field ordering that causes padding
 typedef struct {

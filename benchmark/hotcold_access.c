@@ -10,7 +10,7 @@
 #include <time.h>
 
 // Number of iterations to run
-#define ITERATIONS 100000000
+#define ITERATIONS 1000
 
 // Structure with mixed hot/cold fields
 typedef struct {

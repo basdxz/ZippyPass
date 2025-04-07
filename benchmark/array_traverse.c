@@ -12,7 +12,7 @@
 // Size of the array to process
 #define ARRAY_SIZE 10000
 // Number of iterations to loop through the array
-#define ITERATIONS 1000
+#define ITERATIONS 10
 
 // Structure with fields that have different access patterns
 typedef struct {
