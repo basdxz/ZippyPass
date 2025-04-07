@@ -18,11 +18,11 @@ namespace Zippy {
         std::vector<unsigned> remapTable;
         unsigned sumFieldUses;
 
-        llvm::TypeSize initialSizeBytes;
-        llvm::TypeSize currentSizeBytes;
+        llvm::TypeSize initialSize;
+        llvm::TypeSize currentSize;
 
         explicit StructInfo(const StructType structType, const llvm::DataLayout &DL): structType(structType),
-            sumFieldUses(0), initialSizeBytes(llvm::TypeSize::getZero()), currentSizeBytes(llvm::TypeSize::getZero()) {
+            sumFieldUses(0), initialSize(llvm::TypeSize::getZero()), currentSize(llvm::TypeSize::getZero()) {
             // Collect all the elements from this struct early
             const auto numElements = structType.ptr->getNumElements();
             fieldInfos.reserve(numElements);
@@ -38,8 +38,8 @@ namespace Zippy {
                 remapTable.emplace_back(i);
             }
 
-            initialSizeBytes = DL.getTypeAllocSize(structType.ptr);
-            currentSizeBytes = initialSizeBytes;
+            initialSize = DL.getTypeAllocSize(structType.ptr);
+            currentSize = initialSize;
         }
 
     public:
@@ -72,6 +72,14 @@ namespace Zippy {
          */
         std::vector<FieldInfo> &getFieldInfos() {
             return fieldInfos;
+        }
+
+        llvm::TypeSize getInitialSize() {
+            return initialSize;
+        }
+
+        llvm::TypeSize getCurrentSize() {
+            return currentSize;
         }
 
         unsigned collectFieldUses(FunctionInfo &functionInfo) {
@@ -183,17 +191,17 @@ namespace Zippy {
             return didWork;
         }
 
-        void updateMemCpyRefs(const llvm::DataLayout &DL) {
+        void updateIntrinsicRefs(const llvm::DataLayout &DL) {
             obligatoryMemoryLeak(DL);
             for (const auto intrinsicRef: intrinsicRefs)
-                intrinsicRef->setTypeSize(currentSizeBytes);
+                intrinsicRef->setTypeSize(currentSize);
         }
 
     private:
         void obligatoryMemoryLeak(const llvm::DataLayout &DL) {
             const auto dummyStrucType = llvm::StructType::create(structType.ptr->getContext());
             dummyStrucType->setBody(structType.ptr->elements(), dummyStrucType->isPacked());
-            currentSizeBytes = DL.getTypeAllocSize(dummyStrucType);
+            currentSize = DL.getTypeAllocSize(dummyStrucType);
         }
     };
 }

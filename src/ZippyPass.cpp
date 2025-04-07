@@ -72,6 +72,8 @@ namespace Zippy {
 
         void computeFieldWeights() {
             for (auto &structInfo: structInfos) {
+                llvm::errs() << "Computing Weights For Struct: " << structInfo.getStructType() << "\n";
+
                 structInfo.computeFieldWeights([*this](FieldInfo &fieldInfo) {
                     const auto originalIndex = fieldInfo.getOriginalIndex();
                     auto &uses = fieldInfo.getUses();
@@ -116,12 +118,13 @@ namespace Zippy {
                     }
 
                     // Print debug counters
+                    llvm::errs() << TAB_STR;
                     if (loopAccessCount > 0) {
                         llvm::errs() << llvm::format("Field %d accesses in loops: %d, deepest loop: %d, weight: %d\n",
                                                      originalIndex, loopAccessCount, deepestLoopFound,
                                                      loopAccessWeight);
                     } else {
-                        llvm::errs() << llvm::format("Field %d not used in loops. ", originalIndex);
+                        llvm::errs() << llvm::format("Field %d not used in loops.\n", originalIndex);
                     }
 
                     // We set the loop depth for future debug prints
@@ -171,7 +174,10 @@ namespace Zippy {
                     continue;
                 }
                 structInfo.applyAlign(DL);
-                structInfo.updateMemCpyRefs(M.getDataLayout());
+                structInfo.updateIntrinsicRefs(M.getDataLayout());
+
+                llvm::errs() << "Old Size:[" << structInfo.getInitialSize() << "], ";
+                llvm::errs() << "New Size:[" << structInfo.getCurrentSize() << "]\n";
             }
 
             if (didWork) {

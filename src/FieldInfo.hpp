@@ -163,12 +163,6 @@ namespace Zippy {
         }
 
         bool applyAlign(const llvm::Align newAlignment) {
-            llvm::errs() << "\n align=";
-            llvm::errs() << alignment.value();
-            llvm::errs() << ":";
-            llvm::errs() << newAlignment.value();
-            llvm::errs() << "\n";
-
             if (alignment == newAlignment) return false;
             for (auto use: uses)
                 use.setAlignment(newAlignment);
