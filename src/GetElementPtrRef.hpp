@@ -147,12 +147,30 @@ namespace Zippy {
     class DirectStructRef final : public GetElementPtrRef {
         llvm::Instruction *ptr;
         llvm::StructType *structType;
-        llvm::ConstantInt *operand; // TODO: Technically, this never updates correctly.
+        llvm::GEPOperator *gepInst;
+        llvm::ConstantInt *operand;
     public:
         DirectStructRef(llvm::Instruction *ptr, llvm::StructType *structType, const RefType type)
             : GetElementPtrRef(type), ptr(ptr), structType(structType) {
-            // TODO: This *may* not provide the correct TYPE of integer, but we only use it to read the value back
-            operand = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ptr->getContext()), 0);
+
+            // Creates an IR Builder
+            llvm::IRBuilder irBuilder(ptr);
+            // Creates a GEP, note that '12345' is an evil random number to *avoid* over-eager constant folding
+            auto gep = irBuilder.CreateConstInBoundsGEP2_32(structType, getPointerOperand(), 12345, 0);
+
+            // Actually apply the operand into the instruction unconditionally
+            if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(ptr)) {
+                loadInst->setOperand(loadInst->getPointerOperandIndex(), gep);
+            } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(ptr)) {
+                storeInst->setOperand(storeInst->getPointerOperandIndex(), gep);
+            } else {
+                llvm_unreachable("Expected LoadInst or StoreInst");
+            }
+            gepInst = llvm::cast<llvm::GEPOperator>(gep);
+            operand = llvm::cast<llvm::ConstantInt>(gepInst->getOperand(2));
+
+            // This completes the evil hack, which sets the 'array index' of the value back to zero.
+            gepInst->setOperand(1, irBuilder.getInt32(0));
         }
 
         bool isInstruction() const override {
@@ -170,13 +188,8 @@ namespace Zippy {
             // Avoid changing the IR if no change is needed
             if (fieldIndex == this->operand->getZExtValue()) return;
 
-            // Create a new GEP Instruction
-            llvm::IRBuilder irBuilder(ptr);
-            // TODO: Due to some wacky internal "Constant Folding", this will end up getting double remapped
-            const auto gepInst = irBuilder.CreateStructGEP(structType, getPointerOperand(), fieldIndex);
-
-            // Apply the new GEP Instruction
-            setGEPInstOperand(gepInst);
+            // Apply Operand
+            gepInst->setOperand(2, operand);
 
             // Update the operand
             this->operand = operand;
@@ -206,18 +219,6 @@ namespace Zippy {
             }
             if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(ptr)) {
                 return storeInst->getPointerOperand();
-            }
-            llvm_unreachable("Expected LoadInst or StoreInst");
-        }
-
-        void setGEPInstOperand(llvm::Value *gepInst) const {
-            if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(ptr)) {
-                loadInst->setOperand(loadInst->getPointerOperandIndex(), gepInst);
-                return;
-            }
-            if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(ptr)) {
-                storeInst->setOperand(storeInst->getPointerOperandIndex(), gepInst);
-                return;
             }
             llvm_unreachable("Expected LoadInst or StoreInst");
         }
