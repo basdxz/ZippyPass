@@ -133,8 +133,7 @@ namespace Zippy {
 
     public:
         explicit Pass(llvm::Module &M,
-                      llvm::ModuleAnalysisManager &AM): M(M), AM(AM), DL(M.getDataLayout()) {
-        }
+                      llvm::ModuleAnalysisManager &AM): M(M), AM(AM), DL(M.getDataLayout()) {}
 
         llvm::PreservedAnalyses run() {
             auto didWork = false;
@@ -154,10 +153,11 @@ namespace Zippy {
 
                 llvm::errs() << TAB_STR << "Original order as-found:\n";
                 for (auto &fieldInfo: structInfo.getFieldInfos()) {
-                    llvm::errs() << llvm::format("Field %d: loads=%d, stores=%d, loop_weight=%f, total_weight=%f ",
-                                                 fieldInfo.getOriginalIndex(), fieldInfo.getNumLoads(),
-                                                 fieldInfo.getNumStores(), fieldInfo.getLoopAccessWeight(),
-                                                 fieldInfo.getTotalWeight());
+                    llvm::errs() << TAB_STR << llvm::format(
+                        "Field %d: loads=%d, stores=%d, loop_weight=%f, total_weight=%f\n",
+                        fieldInfo.getOriginalIndex(), fieldInfo.getNumLoads(),
+                        fieldInfo.getNumStores(), fieldInfo.getLoopAccessWeight(),
+                        fieldInfo.getTotalWeight());
                 }
 
                 // Sort using both access count and loop weight
