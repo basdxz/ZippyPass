@@ -32,3 +32,6 @@ add_subdirectory(src)
 # Add the test directory
 enable_testing()
 add_subdirectory(test)
+
+# Add the benchmark directory
+add_subdirectory(benchmark)

@@ -15,6 +15,7 @@
           # https://www.gnu.org/software/libc/manual/html_node/Source-Fortification.html
           hardeningDisable = [ "fortify" ];
           packages = with pkgs; [
+            bc
             cmake
             ninja
             ccache
