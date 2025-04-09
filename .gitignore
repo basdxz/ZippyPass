@@ -2,3 +2,4 @@ cmake-build-debug
 CMakeFiles
 .idea
 build
+benchmark_results
