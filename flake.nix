@@ -16,6 +16,7 @@
           hardeningDisable = [ "fortify" ];
           packages = with pkgs; [
             bc
+            jq
             cmake
             ninja
             ccache
