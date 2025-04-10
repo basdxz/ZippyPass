@@ -66,8 +66,11 @@ namespace Zippy {
         unsigned numLoads = 0;
         unsigned numStores = 0;
 
-        float loopAccessWeight = 1.0F;
-        float totalWeight = 0.0F;
+        float sizeWeight = 1.0F;
+        float loadWeight = 1.0F;
+        float storeWeight = 1.0F;
+        float loopWeight = 1.0F;
+        float totalWeight = 1.0F;
 
         unsigned initialIndex;
         unsigned currentIndex;
@@ -152,12 +155,36 @@ namespace Zippy {
             return uses;
         }
 
-        void setLoopAccessWeight(const float weight) {
-            loopAccessWeight = weight;
+        void setSizeWeight(const float weight) {
+            sizeWeight = weight;
         }
 
-        float getLoopAccessWeight() const {
-            return loopAccessWeight;
+        float getSizeWeight() const {
+            return sizeWeight;
+        }
+
+        void setLoadWeight(const float weight) {
+            loadWeight = weight;
+        }
+
+        float getLoadWeight() const {
+            return loadWeight;
+        }
+
+        void setStoreWeight(const float weight) {
+            storeWeight = weight;
+        }
+
+        float getStoreWeight() const {
+            return storeWeight;
+        }
+
+        void setLoopWeight(const float weight) {
+            loopWeight = weight;
+        }
+
+        float getLoopWeight() const {
+            return loopWeight;
         }
 
         void setTotalWeight(const float weight) {

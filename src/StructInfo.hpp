@@ -23,8 +23,7 @@ namespace Zippy {
         llvm::TypeSize initialSize = llvm::TypeSize::getZero();
         llvm::TypeSize currentSize = llvm::TypeSize::getZero();
 
-        explicit StructInfo(const StructType structType, const llvm::DataLayout &DL):
-            structType(structType),
+        explicit StructInfo(const StructType structType, const llvm::DataLayout &DL): structType(structType),
             initialSize(DL.getTypeAllocSize(structType.ptr)),
             currentSize(initialSize) {
             numFieldInfos = structType.ptr->getNumElements();
@@ -148,17 +147,23 @@ namespace Zippy {
         }
 
         void normalizeWeights() {
-            float maxLoopAccessWeight = 1.0F;
-            float maxTotalWeight = 0.0F;
+            auto maxSizeWeight = 1.0F;
+            auto maxLoadWeight = 1.0F;
+            auto maxStoreWeight = 1.0F;
+            auto maxLoopWeight = 1.0F;
             // Find maximum weights
             for (const auto &fieldInfo: fieldInfos) {
-                maxLoopAccessWeight = std::max(maxLoopAccessWeight, fieldInfo.getLoopAccessWeight());
-                maxTotalWeight = std::max(maxTotalWeight, fieldInfo.getTotalWeight());
+                maxSizeWeight = std::max(maxSizeWeight, fieldInfo.getSizeWeight());
+                maxLoadWeight = std::max(maxLoadWeight, fieldInfo.getLoadWeight());
+                maxStoreWeight = std::max(maxStoreWeight, fieldInfo.getStoreWeight());
+                maxLoopWeight = std::max(maxLoopWeight, fieldInfo.getLoopWeight());
             }
             // Normalized weights (0, 1)
             for (auto &fieldInfo: fieldInfos) {
-                fieldInfo.setLoopAccessWeight(fieldInfo.getLoopAccessWeight() / maxLoopAccessWeight);
-                fieldInfo.setTotalWeight(fieldInfo.getTotalWeight() / maxTotalWeight);
+                fieldInfo.setSizeWeight(fieldInfo.getSizeWeight() / maxSizeWeight);
+                fieldInfo.setLoadWeight(fieldInfo.getLoadWeight() / maxLoadWeight);
+                fieldInfo.setStoreWeight(fieldInfo.getStoreWeight() / maxStoreWeight);
+                fieldInfo.setLoopWeight(fieldInfo.getLoopWeight() / maxLoopWeight);
             }
         }
 
@@ -183,6 +188,8 @@ namespace Zippy {
             }
             // Print debug info
             llvm::errs() << TAB_STR << "Transformation Result:\n";
+            llvm::errs() << TAB_STR_2 << llvm::format("Initial size: [%d] Current Size: [%d]\n",
+                                                      initialSize.getKnownMinValue(), currentSize.getKnownMinValue());
             for (const auto &fieldInfo: fieldInfos) {
                 llvm::errs() << TAB_STR_2 << fieldInfo << "\n";
             }
