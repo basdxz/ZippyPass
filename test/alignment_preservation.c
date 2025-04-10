@@ -50,12 +50,23 @@ int test_alignment(AlignmentStruct* s) {
     return 0;  // Return 0 if no crash due to misalignment
 }
 
+void biasLastElement(AlignmentStruct* s) {
+   s->f1 += s->c1;
+   s->f1 += s->i1;
+   s->f1 += s->d1;
+   s->f1 += s->c2;
+   s->f1 += s->l1;
+   s->f1 += s->c3;
+}
+
 int main() {
     // Initialize structure with known values
     AlignmentStruct data = {'A', 10, 20.0, 'B', 30, 'C', 40.0f};
     
     // Access fields to trigger optimization
     double result = access_fields(&data);
+
+    biasLastElement(&data);
     
     // Test if alignment is preserved after optimization
     int alignment_result = test_alignment(&data);

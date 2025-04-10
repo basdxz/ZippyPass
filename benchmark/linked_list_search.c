@@ -19,8 +19,8 @@ struct NodeGoodLayout {
     char data[1024];                  // Application data (64 bytes)
 };
 
-#define LIST_SIZE 1000
-#define SEARCHES 10000
+#define LIST_SIZE 10000
+#define SEARCHES 1000
 
 // Function prototypes
 struct NodePoorLayout* binary_search_poor(struct NodePoorLayout* head, int length, int target);

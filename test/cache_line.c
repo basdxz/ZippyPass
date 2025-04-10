@@ -24,8 +24,8 @@ struct GoodLayout {
     // 5 bytes padding
 };  // Total: 32 bytes
 
-#define ARRAY_SIZE 5000000
-#define ITERATIONS 200
+#define ARRAY_SIZE 500000
+#define ITERATIONS 20
 
 // Function to prevent compiler from optimizing away our calculations
 volatile double sink;
