@@ -65,10 +65,10 @@ namespace Zippy {
             }
         }
 
-        // Inner loop multipliers, scaled by a non-linear curve as to not give them too much weight
-        const float outerLoopMult = std::pow(100, 1.3F);
-        const float middleLoopMult = std::pow(20, 1.3F);
-        const float innerLoopMult = std::pow(10, 1.3F);
+        // Inner loop multipliers, scaled by a non-linear curve
+        const float outerLoopMult = std::pow(100, 1.3F);  // ~631.0
+        const float middleLoopMult = std::pow(20, 1.3F);  // ~56.2
+        const float innerLoopMult = std::pow(10, 1.3F);   // ~20.0
 
         void computeFieldWeights() {
             for (auto &structInfo: structInfos) {
@@ -280,7 +280,7 @@ llvmGetPassPluginInfo() {
                    ArrayRef<PassBuilder::PipelineElement>) {
                     // Allows this plugin to run when using opt with the pass named 'zippy'
                     //
-                    // eg: -load-pass-plugin ZippyPass.so -passes=zippy input.ll -o output.ll -S
+                    // eg: opt -load-pass-plugin ZippyPass.so -passes=zippy input.ll -o output.ll -S
                     if (Name == "zippy") {
                         // This is your pass's pipeline name
                         MPM.addPass(Zippy::ZippyPass());

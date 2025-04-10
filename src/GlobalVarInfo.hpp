@@ -14,14 +14,16 @@ namespace Zippy {
             std::vector<GlobalVarInfo> globalVarInfos;
             for (auto &globalVarRaw: M.globals()) {
                 const GlobalVariable globalVar = {&globalVarRaw};
-                // Don't mention non-struct globals at all
+                // Non-struct globals are fully ignored
                 if (!globalVar.isStructType()) continue;
+                // Log variable name
                 llvm::errs() << TAB_STR << globalVar;
-                if (globalVar.isZeroInit()) {
-                    llvm::errs() << " - Zero init, skipped\n";
-                    continue;
+                // Check for initializer
+                if (!globalVar.isZeroInit()) {
+                    globalVarInfos.push_back(GlobalVarInfo(globalVar));
+                } else {
+                    llvm::errs() << " - Zero init, skipped";
                 }
-                globalVarInfos.push_back(GlobalVarInfo(globalVar));
                 llvm::errs() << "\n";
             }
             if (globalVarInfos.empty()) {
@@ -44,7 +46,7 @@ namespace Zippy {
             // Get old initializer
             const auto oldInitializer = llvm::dyn_cast<llvm::ConstantStruct>(globalVar.ptr->getInitializer());
             if (!oldInitializer) llvm_unreachable("Old Initializer for Global Variable absent.");
-            // VALIDATE Operand count in remap table AND initializer
+            // Validate Operand count in remap table AND initializer
             const auto numOperands = oldInitializer->getNumOperands();
             if (numOperands != remapTable.size()) llvm_unreachable("Global Variable Operands don't match Remap Table");
             // Compute new Operands
@@ -55,8 +57,8 @@ namespace Zippy {
             // Create new Initializer
             const auto structType = llvm::dyn_cast<llvm::StructType>(getValueType().ptr);
             if (!structType) llvm_unreachable("Global Variable Type is not a Struct");
-            auto newInitializer = llvm::ConstantStruct::get(structType, newOperands);
-            // Apply new initializer!
+            const auto newInitializer = llvm::ConstantStruct::get(structType, newOperands);
+            // Apply new initializer
             globalVar.ptr->setInitializer(newInitializer);
         }
     };

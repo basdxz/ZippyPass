@@ -37,16 +37,19 @@ namespace Zippy {
                 llvm::Instruction *inst = &*I;
 
                 if (auto *loadInst = llvm::dyn_cast<llvm::LoadInst>(inst)) {
+                    // Handles: `load`
                     processLoadOrStore(foundGEPs, inst, loadInst->getPointerOperand(), GetElementPtrRef::LOAD);
                 } else if (auto *storeInst = llvm::dyn_cast<llvm::StoreInst>(inst)) {
+                    // Handles: `store`
                     processLoadOrStore(foundGEPs, inst, storeInst->getPointerOperand(), GetElementPtrRef::STORE);
                 } else if (auto *gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
+                    // Handles: `getelementptr`
                     processGEPInst(foundGEPs, gepInst, GetElementPtrRef::UNKNOWN);
                 } else if (auto *memCpyInst = llvm::dyn_cast<llvm::MemCpyInst>(inst)) {
-                    // TODO: We're collecting but not tracking the number, also not checking if they refer to structs
+                    // Handles: `@llvm.memcpy.p0.*`
                     intrinsicInsts.push_back(std::make_shared<MemCpyInstRef>(memCpyInst));
                 } else if (auto *memSetInst = llvm::dyn_cast<llvm::MemSetInst>(inst)) {
-                    // TODO: We're collecting but not tracking the number, also not checking if they refer to structs
+                    // Handles: `@llvm.memset.p0.*`
                     intrinsicInsts.push_back(std::make_shared<MemSetInstRef>(memSetInst));
                 }
             }
