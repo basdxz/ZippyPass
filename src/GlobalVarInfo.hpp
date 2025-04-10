@@ -40,7 +40,7 @@ namespace Zippy {
             return {globalVar.ptr->getValueType()};
         }
 
-        void remap(const std::span<unsigned> remapTable) {
+        void remap(const std::vector<unsigned> &remapTable) {
             // Get old initializer
             const auto oldInitializer = llvm::dyn_cast<llvm::ConstantStruct>(globalVar.ptr->getInitializer());
             if (!oldInitializer) llvm_unreachable("Old Initializer for Global Variable absent.");

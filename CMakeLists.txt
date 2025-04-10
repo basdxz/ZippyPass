@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(Zippy)
 
-# LLVM uses C++17, but we use C++23 for latest syntax
-set(CMAKE_CXX_STANDARD 23)
+# LLVM uses C++17
+set(CMAKE_CXX_STANDARD 17)
 
 # Include ccache if present
 find_program(CCACHE_EXE ccache)

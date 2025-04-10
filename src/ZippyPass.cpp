@@ -115,7 +115,8 @@ namespace Zippy {
                     unsigned loopAccessCount = 0;
                     unsigned deepestLoopFound = 0;
 
-                    for (const auto &uses = fieldInfo.getUses(); const auto &use: uses) {
+                    const auto &uses = fieldInfo.getUses();
+                    for (const auto &use: uses) {
                         const unsigned depth = use.computeLoopDepth();
                         // No work to do if depth is zero
                         if (depth == 0) continue;
