@@ -1,18 +1,21 @@
 #!/bin/bash
-# Completely standalone benchmark runner for struct field reordering optimization
-# Has no dependency on Make, CMake, or Python
+# Benchmark runner for struct field reordering optimization
 
 # Exit on error
 set -e
 
 # Global settings
-LLVM_PATH=${LLVM_PATH:-"$(which clang | xargs dirname)"}  # Default to system path
+LLVM_PATH=${LLVM_PATH:-"$(which clang | xargs dirname)"}
 CLANG_EXE=${CLANG_EXE:-"$LLVM_PATH/clang"}
 OPT_EXE=${OPT_EXE:-"$(which opt)"}
 PLUGIN_PATH=${PLUGIN_PATH:-"./build/src/ZippyPass.so"}
 BENCHMARK_DIR=${BENCHMARK_DIR:-"./benchmark"}
 RESULTS_DIR=${RESULTS_DIR:-"./benchmark_results"}
 REPORT_FILE=${REPORT_FILE:-"$RESULTS_DIR/benchmark_report.md"}
+
+# Benchmark settings
+BENCHMARK_ITERATIONS=10       # Number of times to run each benchmark
+DEFAULT_INNER_ITERATIONS=100  # Default iterations for the benchmarks
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -21,13 +24,22 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Benchmarks to run
+BENCHMARKS=(
+    "cache_line_benchmark"
+    "padding_benchmark"
+    "loop_access_benchmark"
+    "array_traversal_benchmark"
+    "linked_list_benchmark"
+)
+
 # Usage information
 function show_usage() {
-    echo "Usage: $0 [-c] [-b benchmark_name] [-a] [-r]"
+    echo "Usage: $0 [-c] [-b benchmark_name] [-a] [-i iterations]"
     echo "  -c                Clean results directory before running"
     echo "  -b benchmark_name Run only specified benchmark"
     echo "  -a                Run all benchmarks (default)"
-    echo "  -r                Generate report only (no benchmarks run)"
+    echo "  -i iterations     Number of inner iterations to run (default: $DEFAULT_INNER_ITERATIONS)"
     echo ""
     echo "Environment variables:"
     echo "  LLVM_PATH      Path to LLVM installation (default: derived from clang location)"
@@ -68,6 +80,48 @@ function verify_prerequisites() {
 
     # Create results directory if it doesn't exist
     mkdir -p "$RESULTS_DIR"
+
+    # Create benchmark directory if it doesn't exist
+    mkdir -p "$BENCHMARK_DIR"
+}
+
+# Compile the benchmark
+function compile_benchmark() {
+    local benchmark_name="$1"
+    local benchmark_src="$BENCHMARK_DIR/${benchmark_name}.c"
+    local benchmark_result_dir="$RESULTS_DIR/$benchmark_name"
+
+    # Create benchmark result directory
+    mkdir -p "$benchmark_result_dir"
+
+    # Step 1: Compile to LLVM IR without optimization
+    echo "Generating LLVM IR without optimization..."
+    $CLANG_EXE -S -emit-llvm -O0 \
+        -x c "$benchmark_src" \
+        -o "$benchmark_result_dir/original.ll" \
+        -fno-discard-value-names
+
+    # Step 2: Apply the Zippy optimization pass
+    echo "Applying Zippy optimization pass..."
+    $OPT_EXE -load-pass-plugin "$PLUGIN_PATH" \
+        -passes=zippy \
+        "$benchmark_result_dir/original.ll" \
+        -o "$benchmark_result_dir/optimized.ll" \
+        -S
+
+    # Step 3: Compile original IR to executable with O3
+    echo "Compiling original IR with O3 optimizations..."
+    $CLANG_EXE -O3 \
+        -Qunused-arguments \
+        "$benchmark_result_dir/original.ll" \
+        -o "$benchmark_result_dir/original"
+
+    # Step 4: Compile optimized IR to executable with O3
+    echo "Compiling optimized IR with O3 optimizations..."
+    $CLANG_EXE -O3 \
+        -Qunused-arguments \
+        "$benchmark_result_dir/optimized.ll" \
+        -o "$benchmark_result_dir/optimized"
 }
 
 # Run timing measurements for a benchmark
@@ -76,9 +130,9 @@ function run_timing() {
     local optimized_binary="$2"
     local name="$3"
     local output_file="$4"
-    local iterations=10  # Number of times to run each benchmark
+    local iterations="$5"
 
-    echo "Running $name benchmark..."
+    echo "Running $name benchmark with $iterations iterations..."
 
     # Arrays to store timing results
     original_times=()
@@ -86,10 +140,10 @@ function run_timing() {
 
     # Run original version
     echo "  Testing original version..."
-    for i in $(seq 1 $iterations); do
+    for i in $(seq 1 $BENCHMARK_ITERATIONS); do
         # Use time command with high precision
         start_time=$(date +%s.%N)
-        $original_binary > /dev/null
+        $original_binary $iterations > /dev/null
         end_time=$(date +%s.%N)
 
         # Calculate elapsed time in milliseconds
@@ -100,10 +154,10 @@ function run_timing() {
 
     # Run optimized version
     echo "  Testing optimized version..."
-    for i in $(seq 1 $iterations); do
+    for i in $(seq 1 $BENCHMARK_ITERATIONS); do
         # Use time command with high precision
         start_time=$(date +%s.%N)
-        $optimized_binary > /dev/null
+        $optimized_binary $iterations > /dev/null
         end_time=$(date +%s.%N)
 
         # Calculate elapsed time in milliseconds
@@ -127,7 +181,7 @@ function run_timing() {
         fi
     done
 
-    original_avg=$(echo "scale=2; $original_total / $iterations" | bc)
+    original_avg=$(echo "scale=2; $original_total / $BENCHMARK_ITERATIONS" | bc)
 
     # Calculate statistics for optimized
     optimized_total=0
@@ -144,7 +198,7 @@ function run_timing() {
         fi
     done
 
-    optimized_avg=$(echo "scale=2; $optimized_total / $iterations" | bc)
+    optimized_avg=$(echo "scale=2; $optimized_total / $BENCHMARK_ITERATIONS" | bc)
 
     # Calculate improvement percentage
     if (( $(echo "$original_avg > 0" | bc -l) )); then
@@ -175,83 +229,37 @@ EOF
 
 # Run a single benchmark
 function run_benchmark() {
-    local benchmark_name=$(basename "$1" .c)
-    local benchmark_src="$1"
+    local benchmark_name="$1"
+    local iterations="$2"
+    local benchmark_src="$BENCHMARK_DIR/${benchmark_name}.c"
     local benchmark_result_dir="$RESULTS_DIR/$benchmark_name"
 
     echo -e "${GREEN}Running benchmark: $benchmark_name${NC}"
 
-    # Create benchmark result directory
-    mkdir -p "$benchmark_result_dir"
+    # Check if benchmark source exists
+    if [ ! -f "$benchmark_src" ]; then
+        echo -e "${RED}Error: Benchmark source not found: $benchmark_src${NC}"
+        exit 1
+    fi
 
-    # Copy benchmark source
-    cp "$benchmark_src" "$benchmark_result_dir/source.c"
+    # Compile the benchmark
+    compile_benchmark "$benchmark_name"
 
-    # Step 1: Compile to LLVM IR without optimization
-    echo "Generating LLVM IR without optimization..."
-    $CLANG_EXE -S -emit-llvm -O0 \
-        -x c "$benchmark_result_dir/source.c" \
-        -o "$benchmark_result_dir/original.ll" \
-        -fno-discard-value-names
-
-    # Step 2: Apply the Zippy optimization pass
-    echo "Applying Zippy optimization pass..."
-    $OPT_EXE -load-pass-plugin "$PLUGIN_PATH" \
-        -passes=zippy \
-        "$benchmark_result_dir/original.ll" \
-        -o "$benchmark_result_dir/optimized.ll" \
-        -S
-
-    # Step 3: Compile original IR to executable with O3
-    echo "Compiling original IR with O3 optimizations..."
-    $CLANG_EXE -O3 \
-        -Qunused-arguments \
-        "$benchmark_result_dir/original.ll" \
-        -o "$benchmark_result_dir/original"
-
-    # Step 4: Compile optimized IR to executable with O3
-    echo "Compiling optimized IR with O3 optimizations..."
-    $CLANG_EXE -O3 \
-        -Qunused-arguments \
-        "$benchmark_result_dir/optimized.ll" \
-        -o "$benchmark_result_dir/optimized"
-
-    # Step 5: Run timing measurements
+    # Run timing measurements
     run_timing \
         "$benchmark_result_dir/original" \
         "$benchmark_result_dir/optimized" \
         "$benchmark_name" \
-        "$benchmark_result_dir/results.txt"
+        "$benchmark_result_dir/results.txt" \
+        "$iterations"
 
     # Extract struct definitions for comparison
     echo "Extracting struct definitions for analysis..."
-    grep -A 10 "struct" "$benchmark_result_dir/original.ll" > "$benchmark_result_dir/original_structs.txt" || true
-    grep -A 10 "struct" "$benchmark_result_dir/optimized.ll" > "$benchmark_result_dir/optimized_structs.txt" || true
-
-    # Create a diff of the two IR files
-    diff -u "$benchmark_result_dir/original.ll" "$benchmark_result_dir/optimized.ll" > "$benchmark_result_dir/ir_diff.txt" || true
+    grep -A 20 "type.*struct" "$benchmark_result_dir/original.ll" > "$benchmark_result_dir/original_structs.txt" || true
+    grep -A 20 "type.*struct" "$benchmark_result_dir/optimized.ll" > "$benchmark_result_dir/optimized_structs.txt" || true
 
     echo -e "${GREEN}Benchmark $benchmark_name completed${NC}"
     echo ""
-}
-
-# Run all benchmarks
-function run_all_benchmarks() {
-    # Find all C files in the benchmark directory
-    local benchmark_files=$(find "$BENCHMARK_DIR" -name "*.c" -type f | sort)
-    local benchmark_count=$(echo "$benchmark_files" | wc -l)
-
-    if [ "$benchmark_count" -eq 0 ]; then
-        echo -e "${YELLOW}No benchmark files found in $BENCHMARK_DIR${NC}"
-        exit 1
-    fi
-
-    echo -e "${BLUE}Found $benchmark_count benchmarks to run${NC}"
-
-    # Run each benchmark
-    for benchmark_file in $benchmark_files; do
-        run_benchmark "$benchmark_file"
-    done
 }
 
 # Generate a simple markdown report from benchmark results
@@ -327,6 +335,8 @@ EOF
         improvement=$(grep "^improvement_percent:" "$result_file" | cut -d' ' -f2-)
         iterations=$(grep "^iterations:" "$result_file" | cut -d' ' -f2-)
 
+        benchmark_dir=$(dirname "$result_file")
+
         # Add benchmark section
         echo "### $benchmark" >> "$REPORT_FILE"
         echo "" >> "$REPORT_FILE"
@@ -335,12 +345,17 @@ EOF
         echo "- **Improvement**: $improvement%" >> "$REPORT_FILE"
         echo "" >> "$REPORT_FILE"
 
-        # Add struct analysis if available
-        benchmark_dir=$(dirname "$result_file")
-        if [ -f "$benchmark_dir/optimized_structs.txt" ]; then
-            echo "#### Struct Optimization" >> "$REPORT_FILE"
+        # Add struct comparison
+        if [ -f "$benchmark_dir/original_structs.txt" ] && [ -f "$benchmark_dir/optimized_structs.txt" ]; then
+            echo "#### Struct Transformation" >> "$REPORT_FILE"
             echo "" >> "$REPORT_FILE"
+            echo "Original struct:" >> "$REPORT_FILE"
+            echo "\`\`\`llvm" >> "$REPORT_FILE"
+            cat "$benchmark_dir/original_structs.txt" >> "$REPORT_FILE"
             echo "\`\`\`" >> "$REPORT_FILE"
+            echo "" >> "$REPORT_FILE"
+            echo "Optimized struct:" >> "$REPORT_FILE"
+            echo "\`\`\`llvm" >> "$REPORT_FILE"
             cat "$benchmark_dir/optimized_structs.txt" >> "$REPORT_FILE"
             echo "\`\`\`" >> "$REPORT_FILE"
             echo "" >> "$REPORT_FILE"
@@ -348,20 +363,15 @@ EOF
     done
 
     echo -e "${GREEN}Benchmark report generated: $REPORT_FILE${NC}"
-
-    # Show a brief summary
-    echo ""
-    echo -e "${BLUE}Summary:${NC}"
-    head -n 15 "$REPORT_FILE" | tail -n 7
 }
 
 # Parse command line arguments
 CLEAN=0
 RUN_ALL=1
 SPECIFIC_BENCHMARK=""
-REPORT_ONLY=0
+INNER_ITERATIONS=$DEFAULT_INNER_ITERATIONS
 
-while getopts "hcb:ar" opt; do
+while getopts "hcb:ai:" opt; do
     case $opt in
         h)
             show_usage
@@ -377,8 +387,8 @@ while getopts "hcb:ar" opt; do
         a)
             RUN_ALL=1
             ;;
-        r)
-            REPORT_ONLY=1
+        i)
+            INNER_ITERATIONS="$OPTARG"
             ;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
@@ -395,18 +405,27 @@ if [ $CLEAN -eq 1 ]; then
     clean_results
 fi
 
-if [ $REPORT_ONLY -eq 1 ]; then
-    generate_report
-    exit 0
-fi
+# Check if benchmarks exist
+for benchmark in "${BENCHMARKS[@]}"; do
+    if [ ! -f "$BENCHMARK_DIR/${benchmark}.c" ]; then
+        echo -e "${YELLOW}Warning: Benchmark source not found: $BENCHMARK_DIR/${benchmark}.c${NC}"
+        echo "You may need to copy benchmark files to $BENCHMARK_DIR first."
+    fi
+done
 
 if [ $RUN_ALL -eq 1 ]; then
-    run_all_benchmarks
+    for benchmark in "${BENCHMARKS[@]}"; do
+        if [ -f "$BENCHMARK_DIR/${benchmark}.c" ]; then
+            run_benchmark "$benchmark" "$INNER_ITERATIONS"
+        else
+            echo -e "${YELLOW}Skipping missing benchmark: $benchmark${NC}"
+        fi
+    done
 else
-    if [ -f "$BENCHMARK_DIR/$SPECIFIC_BENCHMARK.c" ]; then
-        run_benchmark "$BENCHMARK_DIR/$SPECIFIC_BENCHMARK.c"
+    if [ -f "$BENCHMARK_DIR/${SPECIFIC_BENCHMARK}.c" ]; then
+        run_benchmark "$SPECIFIC_BENCHMARK" "$INNER_ITERATIONS"
     else
-        echo -e "${YELLOW}Error: Benchmark $SPECIFIC_BENCHMARK not found${NC}"
+        echo -e "${RED}Error: Benchmark $SPECIFIC_BENCHMARK not found${NC}"
         exit 1
     fi
 fi
