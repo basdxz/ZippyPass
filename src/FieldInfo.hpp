@@ -57,32 +57,51 @@ namespace Zippy {
 
     class FieldInfo {
         Type type;
-        llvm::Align alignment;
+        llvm::Align initialAlign;
+        llvm::Align currentAlign;
+        llvm::TypeSize storeSize;
+        llvm::TypeSize allocSize;
         std::vector<FieldUse> uses;
 
-        unsigned numLoads;
-        unsigned numStores;
+        unsigned numLoads = 0;
+        unsigned numStores = 0;
 
-        unsigned originalIndex;
+        float loopAccessWeight = 1.0F;
+        float totalWeight = 0.0F;
+
+        unsigned initialIndex;
         unsigned currentIndex;
         unsigned targetIndex;
 
-        float loopAccessWeight;
-        float totalWeight;
-
     public:
-        explicit FieldInfo(const Type type, const unsigned index, const llvm::Align alignment): type(type),
-            alignment(alignment),
-            numLoads(0),
-            numStores(0),
-            originalIndex(index),
+        explicit FieldInfo(const llvm::DataLayout &DL, const StructType structType, const unsigned index):
+            type(structType.getElementType(index)),
+            initialAlign(type.getABIAlign(DL)),
+            currentAlign(initialAlign),
+            storeSize(type.getStoreSize(DL)),
+            allocSize(type.getAllocSize(DL)),
+            initialIndex(index),
             currentIndex(index),
-            targetIndex(index),
-            loopAccessWeight(1.0F),
-            totalWeight(0.0F) {}
+            targetIndex(index) {}
 
-        const Type &getType() const {
+        Type getType() const {
             return type;
+        }
+
+        llvm::Align getInitialAlign() const {
+            return initialAlign;
+        }
+
+        llvm::Align getCurrentAlign() const {
+            return currentAlign;
+        }
+
+        llvm::TypeSize getStoreSize() const {
+            return storeSize;
+        }
+
+        llvm::TypeSize getAllocSize() const {
+            return allocSize;
         }
 
         unsigned getNumLoads() const {
@@ -98,8 +117,8 @@ namespace Zippy {
         }
 
         // Original index as found in the source code
-        unsigned getOriginalIndex() const {
-            return originalIndex;
+        unsigned getInitialIndex() const {
+            return initialIndex;
         }
 
         unsigned getCurrentIndex() const {
@@ -162,12 +181,39 @@ namespace Zippy {
             return true;
         }
 
-        bool applyAlign(const llvm::Align newAlignment) {
-            if (alignment == newAlignment) return false;
+        void applyAlign(const llvm::Align align) {
+            if (currentAlign == align) return;
             for (auto use: uses)
-                use.setAlignment(newAlignment);
-            alignment = newAlignment;
-            return true;
+                use.setAlignment(align);
+        }
+
+        void print(llvm::raw_ostream &out) const {
+            // Append the index
+            if (initialIndex == currentIndex) {
+                out << llvm::format("Index: [%02d==%02d]", initialIndex, currentIndex);
+            } else {
+                out << llvm::format("Index: [%02d->%02d]", initialIndex, currentIndex);
+            }
+            out << " - ";
+            // Append the alignment
+            if (initialAlign == currentAlign) {
+                out << llvm::format("Align: [%02d==%02d]", initialAlign.value(), currentAlign.value());
+            } else {
+                out << llvm::format("Align: [%02d->%02d]", initialAlign.value(), currentAlign.value());
+            }
+            out << " - ";
+            // Store Size
+            out << llvm::format("Store Size: [%d]", storeSize.getKnownMinValue());
+            out << " - ";
+            // Alloc Size
+            out << llvm::format("Alloc Size: [%d]", allocSize.getKnownMinValue());
         }
     };
+}
+
+namespace llvm {
+    inline raw_ostream &operator<<(raw_ostream &out, const Zippy::FieldInfo &fieldInfo) {
+        fieldInfo.print(out);
+        return out;
+    }
 }

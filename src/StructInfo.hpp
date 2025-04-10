@@ -8,38 +8,39 @@
 namespace Zippy {
     class StructInfo {
         // TODO: This is a guess and will "generally" be correct, it's wrong when geps are generated in a chained way.
-        const unsigned FIELD_IDX = 2;
+        static constexpr unsigned FIELD_IDX = 2;
 
         StructType structType;
         std::vector<FieldInfo> fieldInfos;
+        unsigned numFieldInfos;
+        bool isPacked;
         std::vector<GlobalVarInfo> globalVarInfos;
         std::vector<std::shared_ptr<IntrinsicInstRef>> intrinsicRefs;
 
         std::vector<unsigned> remapTable;
-        unsigned sumFieldUses;
+        unsigned sumFieldUses = 0;
 
-        llvm::TypeSize initialSize;
-        llvm::TypeSize currentSize;
+        llvm::TypeSize initialSize = llvm::TypeSize::getZero();
+        llvm::TypeSize currentSize = llvm::TypeSize::getZero();
 
-        explicit StructInfo(const StructType structType, const llvm::DataLayout &DL): structType(structType),
-            sumFieldUses(0), initialSize(llvm::TypeSize::getZero()), currentSize(llvm::TypeSize::getZero()) {
+        explicit StructInfo(const StructType structType, const llvm::DataLayout &DL):
+            structType(structType),
+            initialSize(DL.getTypeAllocSize(structType.ptr)),
+            currentSize(initialSize) {
+            numFieldInfos = structType.ptr->getNumElements();
+            isPacked = structType.ptr->isPacked();
+
             // Collect all the elements from this struct early
-            const auto numElements = structType.ptr->getNumElements();
-            fieldInfos.reserve(numElements);
-
-            for (auto i = 0; i < numElements; i++) {
-                fieldInfos.emplace_back(structType.getElementType(i), i,
-                                        calculateFieldAlignment(DL, structType.ptr, i));
+            fieldInfos.reserve(numFieldInfos);
+            for (auto i = 0; i < numFieldInfos; i++) {
+                fieldInfos.emplace_back(DL, structType, i);
             }
 
             // Pre-generate identity remap table
-            remapTable.reserve(numElements);
-            for (auto i = 0; i < numElements; ++i) {
+            remapTable.reserve(numFieldInfos);
+            for (auto i = 0; i < numFieldInfos; ++i) {
                 remapTable.emplace_back(i);
             }
-
-            initialSize = DL.getTypeAllocSize(structType.ptr);
-            currentSize = initialSize;
         }
 
     public:
@@ -133,7 +134,7 @@ namespace Zippy {
             for (auto &globalVarInfo: allGlobalVarInfos) {
                 if (globalVarInfo.getValueType().ptr != structType.ptr) continue;
                 globalVarInfos.push_back(globalVarInfo);
-                llvm::errs() << TAB_STR << TAB_STR << "Collected: ";
+                llvm::errs() << TAB_STR_2 << "Collected: ";
                 globalVarInfo.getGlobalVar().printName(llvm::errs());
                 llvm::errs() << "\n";
                 varsCollected++;
@@ -146,68 +147,84 @@ namespace Zippy {
             return varsCollected;
         }
 
-        void updateTargetIndices() {
-            llvm::errs() << "Updating Target Indicies\n";
+        void normalizeWeights() {
+            float maxLoopAccessWeight = 1.0F;
+            float maxTotalWeight = 0.0F;
+            // Find maximum weights
+            for (const auto &fieldInfo: fieldInfos) {
+                maxLoopAccessWeight = std::max(maxLoopAccessWeight, fieldInfo.getLoopAccessWeight());
+                maxTotalWeight = std::max(maxTotalWeight, fieldInfo.getTotalWeight());
+            }
+            // Normalized weights (0, 1)
+            for (auto &fieldInfo: fieldInfos) {
+                fieldInfo.setLoopAccessWeight(fieldInfo.getLoopAccessWeight() / maxLoopAccessWeight);
+                fieldInfo.setTotalWeight(fieldInfo.getTotalWeight() / maxTotalWeight);
+            }
+        }
 
-            const auto numFieldInfos = fieldInfos.size();
+        bool applyTransform(const llvm::DataLayout &DL) {
+            updateTargetIndices();
+            // Early return if no work was done
+            if (!remapFields()) return false;
+            // Update the body and current size
+            updateBody();
+            updateCurrentSize(DL);
+            // Apply alignment
+            for (auto i = 0; i < numFieldInfos; i++) {
+                fieldInfos[i].applyAlign(calculateFieldAlignment(DL, structType.ptr, i));
+            }
+            // Remap global variables
+            for (auto &globalVarInfo: globalVarInfos) {
+                globalVarInfo.remap(remapTable);
+            }
+            // Update intrinsic references
+            for (const auto intrinsicRef: intrinsicRefs) {
+                intrinsicRef->setTypeSize(currentSize);
+            }
+            // Print debug info
+            llvm::errs() << TAB_STR << "Transformation Result:\n";
+            for (const auto &fieldInfo: fieldInfos) {
+                llvm::errs() << TAB_STR_2 << fieldInfo << "\n";
+            }
+            return true;
+        }
+
+    private:
+        void updateTargetIndices() {
             for (auto i = 0; i < numFieldInfos; i++) {
                 auto &fieldInfo = fieldInfos[i];
                 remapTable[i] = fieldInfo.getCurrentIndex();
                 fieldInfo.setTargetIndex(i);
             }
-
-            for (int i = 0; i < numFieldInfos; ++i) {
-                llvm::errs() << llvm::format("%d->%d\n", i, remapTable[i]);
-            }
         }
 
-        bool applyRemap() {
+        bool remapFields() {
             auto didWork = false;
-            const auto numFieldInfos = fieldInfos.size();
-
+            // Apply the remap to each field
             for (auto i = 0; i < numFieldInfos; i++) {
                 didWork |= fieldInfos[i].applyRemap();
             }
+            return didWork;
+        }
 
-            // Early return if no work was done
-            if (!didWork) return false;
-
-            // Creating and populating the new struct body
+        void updateBody() {
+            // Create and populating the new struct body
             std::vector<llvm::Type*> newBody;
             newBody.reserve(numFieldInfos);
             for (const auto &fieldInfo: fieldInfos) {
                 newBody.push_back(fieldInfo.getType().ptr);
             }
             // Replace struct body
-            structType.ptr->setBody(newBody, structType.ptr->isPacked());
-
-            // Remapping global variables
-            for (auto &globalVarInfo: globalVarInfos) {
-                globalVarInfo.remap(remapTable);
-            }
-            return true;
+            structType.ptr->setBody(newBody, isPacked);
         }
 
-        bool applyAlign(const llvm::DataLayout &DL) {
-            auto didWork = false;
-            const auto numFieldInfos = fieldInfos.size();
-            for (auto i = 0; i < numFieldInfos; i++) {
-                didWork |= fieldInfos[i].applyAlign(calculateFieldAlignment(DL, structType.ptr, i));
-            }
-            return didWork;
-        }
-
-        void updateIntrinsicRefs(const llvm::DataLayout &DL) {
-            obligatoryMemoryLeak(DL);
-            for (const auto intrinsicRef: intrinsicRefs)
-                intrinsicRef->setTypeSize(currentSize);
-        }
-
-    private:
-        void obligatoryMemoryLeak(const llvm::DataLayout &DL) {
-            const auto dummyStrucType = llvm::StructType::create(structType.ptr->getContext());
-            dummyStrucType->setBody(structType.ptr->elements(), dummyStrucType->isPacked());
-            currentSize = DL.getTypeAllocSize(dummyStrucType);
+        void updateCurrentSize(const llvm::DataLayout &DL) {
+            // TODO: The only way I've found to properly calculate the correct size of a modified llvm::StructType,
+            //       is to create a new instance. This seems to be because llvm::DataLayout caches this value.
+            //       I would like a better way to do this, because this way does cause a tiny memory leak.
+            const auto dummyStructType = llvm::StructType::create(structType.ptr->getContext());
+            dummyStructType->setBody(structType.ptr->elements(), isPacked);
+            currentSize = DL.getTypeAllocSize(dummyStructType);
         }
     };
 }

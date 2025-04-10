@@ -205,12 +205,14 @@ function run_benchmark() {
     # Step 3: Compile original IR to executable with O3
     echo "Compiling original IR with O3 optimizations..."
     $CLANG_EXE -O3 \
+        -Qunused-arguments \
         "$benchmark_result_dir/original.ll" \
         -o "$benchmark_result_dir/original"
 
     # Step 4: Compile optimized IR to executable with O3
     echo "Compiling optimized IR with O3 optimizations..."
     $CLANG_EXE -O3 \
+        -Qunused-arguments \
         "$benchmark_result_dir/optimized.ll" \
         -o "$benchmark_result_dir/optimized"
 

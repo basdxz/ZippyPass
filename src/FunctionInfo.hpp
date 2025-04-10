@@ -63,7 +63,7 @@ namespace Zippy {
             }
 
             if (loopCount > 0) {
-                llvm::errs() << "\n" << TAB_STR << TAB_STR << llvm::format("Found: [%d] Loops", loopCount);
+                llvm::errs() << "\n" << TAB_STR_2 << llvm::format("Found: [%d] Loops", loopCount);
             }
         }
 
@@ -151,10 +151,10 @@ namespace Zippy {
                     }
                 }
                 functionInfos.push_back(functionInfo);
-                llvm::errs() << "\n" << TAB_STR << llvm::format("Found Refs: I:[%d] O:[%d] D:[%d] C[%d]\n",
-                                                                functionInfo.numGEPInst,
-                                                                functionInfo.numGEPOps, functionInfo.numDirectRefs,
-                                                                functionInfo.intrinsicInsts.size());
+                llvm::errs() << "\n" << TAB_STR_2 << llvm::format("Found Refs: I:[%d] O:[%d] D:[%d] C[%d]\n",
+                                                                 functionInfo.numGEPInst,
+                                                                 functionInfo.numGEPOps, functionInfo.numDirectRefs,
+                                                                 functionInfo.intrinsicInsts.size());
             }
             if (functionInfos.empty()) {
                 llvm::errs() << "No Functions collected\n\n";

@@ -19,9 +19,22 @@ namespace Zippy {
     const std::string NO_VAL_NAME_STR = "???";
     const std::string SKIPPED_STR = "[SKIPPED]";
     const std::string TAB_STR = "    ";
+    const std::string TAB_STR_2 = TAB_STR + TAB_STR;
 
     struct Type {
         llvm::Type *ptr;
+
+        llvm::Align getABIAlign(const llvm::DataLayout &DL) const {
+            return DL.getABITypeAlign(ptr);
+        }
+
+        llvm::TypeSize getStoreSize(const llvm::DataLayout &DL) const {
+            return DL.getTypeStoreSize(ptr);
+        }
+
+        llvm::TypeSize getAllocSize(const llvm::DataLayout &DL) const {
+            return DL.getTypeAllocSize(ptr);
+        }
     };
 
     struct StructType {
@@ -33,6 +46,17 @@ namespace Zippy {
 
         Type getElementType(const unsigned index) const {
             return {ptr->getElementType(index)};
+        }
+
+        llvm::TypeSize getElementOffset(const llvm::DataLayout &DL, const unsigned index) const {
+            return DL.getStructLayout(ptr)->getElementOffset(index);
+        }
+
+        llvm::Align calculateElementAlignment(const llvm::DataLayout &DL, const unsigned index) const {
+            const auto fieldOffset = getElementOffset(DL, index);
+            const auto fieldType = getElementType(index);
+            const auto typeAlignment = fieldType.getABIAlign(DL);
+            return commonAlignment(typeAlignment, fieldOffset);
         }
     };
 
