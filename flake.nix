@@ -15,12 +15,15 @@
           # https://www.gnu.org/software/libc/manual/html_node/Source-Fortification.html
           hardeningDisable = [ "fortify" ];
           packages = with pkgs; [
+            # Benchmark Script Utils
             bc
             jq
+            # Build System
             cmake
             ninja
             ccache
             clang_19
+            # LLVM Dependency
             llvm_19
           ];
           shellHook = ''
