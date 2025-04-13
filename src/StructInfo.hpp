@@ -50,6 +50,8 @@ namespace Zippy {
                 const StructType structType{structTy};
                 // Skip unnamed structs
                 if (!structType.ptr->hasName()) continue;
+                // Skip structs with less than two elements
+                if (structType.ptr->getNumElements() < 2) continue;
                 // TODO: Currently skipping 'timespec' structs, but should have a more robust marking system
                 if (structType.ptr->getName() == "struct.timespec") continue;
 
