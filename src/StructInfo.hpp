@@ -118,15 +118,6 @@ namespace Zippy {
             return foundUses;
         }
 
-        /**
-         * This function inverts control flow, so that the actual sorting logic is top-level.
-         */
-        void computeFieldWeights(const std::function<void(FieldInfo &)> &func) {
-            for (auto &fieldInfo: fieldInfos) {
-                func(fieldInfo);
-            }
-        }
-
         unsigned collectGlobalVars(std::vector<GlobalVarInfo> &allGlobalVarInfos) {
             llvm::errs() << TAB_STR << "For Struct: ";
             structType.printName(llvm::errs());

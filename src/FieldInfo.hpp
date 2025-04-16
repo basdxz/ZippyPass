@@ -15,14 +15,6 @@ namespace Zippy {
         FieldUse(const std::shared_ptr<llvm::LoopInfo> &loopInfo, const std::shared_ptr<GetElementPtrRef> &gepRef,
                  const unsigned operandIndex): loopInfo(loopInfo), gepRef(gepRef), operandIndex(operandIndex) {}
 
-        bool isWrite() {
-            return gepRef->isWrite();
-        }
-
-        uint64_t getFieldIndex() const {
-            return gepRef->getOperand(operandIndex)->getZExtValue();
-        }
-
         void setFieldIndex(const uint64_t index) const {
             const auto oldOperand = gepRef->getOperand(operandIndex);
             // Early return if no work needs to be done, happens due to some duplication jank
@@ -77,15 +69,15 @@ namespace Zippy {
         unsigned targetIndex;
 
     public:
-        explicit FieldInfo(const llvm::DataLayout &DL, const StructType structType, const unsigned index):
-            type(structType.getElementType(index)),
-            initialAlign(type.getABIAlign(DL)),
-            currentAlign(initialAlign),
-            storeSize(type.getStoreSize(DL)),
-            allocSize(type.getAllocSize(DL)),
-            initialIndex(index),
-            currentIndex(index),
-            targetIndex(index) {}
+        explicit FieldInfo(const llvm::DataLayout &DL, const StructType structType,
+                           const unsigned index): type(structType.getElementType(index)),
+                                                  initialAlign(type.getABIAlign(DL)),
+                                                  currentAlign(initialAlign),
+                                                  storeSize(type.getStoreSize(DL)),
+                                                  allocSize(type.getAllocSize(DL)),
+                                                  initialIndex(index),
+                                                  currentIndex(index),
+                                                  targetIndex(index) {}
 
         Type getType() const {
             return type;
@@ -136,18 +128,15 @@ namespace Zippy {
             targetIndex = idx;
         }
 
-        void addUse(std::shared_ptr<llvm::LoopInfo> loopInfo, std::shared_ptr<GetElementPtrRef> gepRef,
+        void addUse(const std::shared_ptr<llvm::LoopInfo> &loopInfo,
+                    const std::shared_ptr<GetElementPtrRef> &gepRef,
                     const unsigned operandIndex) {
             uses.emplace_back(loopInfo, gepRef, operandIndex);
-            switch (gepRef->getType()) {
-                case GetElementPtrRef::LOAD:
-                    ++numLoads;
-                    break;
-                case GetElementPtrRef::STORE:
-                    ++numStores;
-                    break;
-                default:
-                    break;
+            GetElementPtrRef::RefType type = gepRef->getType();
+            if (type == GetElementPtrRef::LOAD) {
+                numLoads++;
+            } else if (type == GetElementPtrRef::STORE) {
+                numStores++;
             }
         }
 
@@ -203,14 +192,14 @@ namespace Zippy {
             // Skip work if field has no uses
             if (uses.empty()) return false;
             // Set all new field indices to target index
-            for (auto use: uses)
+            for (auto &use: uses)
                 use.setFieldIndex(targetIndex);
             return true;
         }
 
         void applyAlign(const llvm::Align align) {
             if (currentAlign == align) return;
-            for (auto use: uses)
+            for (auto &use: uses)
                 use.setAlignment(align);
         }
 
